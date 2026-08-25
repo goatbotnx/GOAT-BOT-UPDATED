@@ -1,63 +1,124 @@
 const axios = require("axios");
-const DIG = require("discord-image-generation");
+const { loadImage, createCanvas } = require("canvas");
 const fs = require("fs-extra");
 const path = require("path");
 
 module.exports = {
   config: {
     name: "rip",
-    version: "1.6",
-    author: "milan+xalman",
+    version: "2.6",
+    author: "xalman+sadik",
     countDown: 5,
     role: 0,
-    shortDescription: "RIP image generation",
-    longDescription: "Create a RIP tombstone image with user avatar",
+    shortDescription: "RIP image with mention and sender avatars",
+    longDescription: "Edit image with sender and mentioned user profile pictures with no text on image.",
     category: "FUN & SOCIAL",
-    guide: {
-      en: "{pn} [@mention / reply / UID]"
-    }
+    guide: "{pn} @mention | reply | uid"
   },
 
   onStart: async function ({ api, event, args }) {
-    const { threadID, messageID, mentions, type, messageReply, senderID } = event;
-    let targetID;
-    if (type === "message_reply") {
-      targetID = messageReply.senderID;
-    } else if (Object.keys(mentions).length > 0) {
-      targetID = Object.keys(mentions)[0];
+    let mentionID;
+    
+    if (event.type === "message_reply") {
+      mentionID = event.messageReply.senderID;
+    } else if (Object.keys(event.mentions).length > 0) {
+      mentionID = Object.keys(event.mentions)[0];
     } else if (args.length > 0 && !isNaN(args[0])) {
-      targetID = args[0];
+      mentionID = args[0];
     } else {
-      targetID = senderID;
+      return api.sendMessage("Please mention a user, reply to a message, or provide a UID.", event.threadID, event.messageID);
     }
 
+    const senderID = event.senderID;
+    const bgUrl = "https://i.imgur.com/EgOL9Fo.jpeg";
+
     try {
-      const info = await api.getUserInfo(targetID);
-      const name = info[targetID].name;
-
-      api.sendMessage(`please wait 🐸🙏`, threadID, messageID);
-
-      const avatarRes = await axios.get(`https://graph.facebook.com/${targetID}/picture?width=512&height=512&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`, {
-        responseType: 'arraybuffer'
+      const bgRes = await axios.get(bgUrl, {
+        responseType: "arraybuffer",
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
       });
-      const avatarBuffer = Buffer.from(avatarRes.data, 'utf-8');
-      const img = await new DIG.Rip().getImage(avatarBuffer);    
-      const cacheDir = path.join(__dirname, 'cache');
-      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-      const pathSave = path.join(cacheDir, `rip_${targetID}.png`);
+      const bgImage = await loadImage(Buffer.from(bgRes.data, "utf-8"));
 
-      fs.writeFileSync(pathSave, Buffer.from(img));
+      let senderName = "Someone";
+      let mentionName = "Someone";
+      let senderAvatarUrl = `https://graph.facebook.com/${senderID}/picture?width=512&height=512`;
+      let mentionAvatarUrl = `https://graph.facebook.com/${mentionID}/picture?width=512&height=512`;
+
+      try {
+        const userInfo = await api.getUserInfo([senderID, mentionID]);
+        if (userInfo[senderID]) {
+          senderName = userInfo[senderID].name.split(" (")[0].split(" @")[0].trim();
+          if (userInfo[senderID].thumbSrc) senderAvatarUrl = userInfo[senderID].thumbSrc;
+        }
+        if (userInfo[mentionID]) {
+          mentionName = userInfo[mentionID].name.split(" (")[0].split(" @")[0].trim();
+          if (userInfo[mentionID].thumbSrc) mentionAvatarUrl = userInfo[mentionID].thumbSrc;
+        }
+      } catch (e) {
+        console.log("Error fetching user info:", e.message);
+      }
+
+      const getBuffer = async (url) => {
+        try {
+          const res = await axios.get(url, { responseType: "arraybuffer", headers: { "User-Agent": "Mozilla/5.0" } });
+          return Buffer.from(res.data, "utf-8");
+        } catch (err) {
+          const fallback = await axios.get(`https://graph.facebook.com/${senderID}/picture?width=512&height=512`, { responseType: "arraybuffer" });
+          return Buffer.from(fallback.data, "utf-8");
+        }
+      };
+
+      const [senderBuffer, mentionBuffer] = await Promise.all([
+        getBuffer(senderAvatarUrl),
+        getBuffer(mentionAvatarUrl)
+      ]);
+
+      const senderImage = await loadImage(senderBuffer);
+      const mentionImage = await loadImage(mentionBuffer);
+
+      const canvas = createCanvas(bgImage.width, bgImage.height);
+      const ctx = canvas.getContext("2d");
+
+      ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+
+      const size = 90;
+      const senderX = 230;
+      const senderY = 180;
+      const mentionX = 80;
+      const mentionY = 160;
+
+      ctx.save();
+      ctx.translate(mentionX + size / 2, mentionY + size / 2);
+      ctx.rotate(-3 * Math.PI / 180); 
+      ctx.drawImage(mentionImage, -size / 2, -size / 2, size, size);
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(senderX + size / 2, senderY + size / 2, size / 2, 0, Math.PI * 2, true);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(senderImage, senderX, senderY, size, size);
+      ctx.restore();
+
+      const cacheFolder = path.join(__dirname, "cache");
+      fs.ensureDirSync(cacheFolder);
+      const imagePath = path.join(cacheFolder, `rip_${senderID}_${Date.now()}.png`);
+      
+      fs.writeFileSync(imagePath, canvas.toBuffer("image/png"));
+
+      const bodyMsg = `R.I.P ⚰️🕊️\nশোনা যাচ্ছে ${mentionName}-এর কবরের ওপর দাঁড়িয়ে ফুল দিয়ে শোক প্রকাশ করছেন স্বয়ং ${senderName}!\n\n"সবাই একদিন চলে যাবে, কিন্তু এই স্মৃতি থেকে যাবে!" 😢🥀`;
 
       return api.sendMessage({
-        body: `বিদায় ${name}! ওপারে ভালো থেকো। 🕊️`,
-        attachment: fs.createReadStream(pathSave)
-      }, threadID, () => {
-        if (fs.existsSync(pathSave)) fs.unlinkSync(pathSave);
-      }, messageID);
+        body: bodyMsg,
+        attachment: fs.createReadStream(imagePath)
+      }, event.threadID, () => {
+        if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+      }, event.messageID);
 
     } catch (error) {
-      console.error(error);
-      return api.sendMessage("command error ❌", threadID, messageID);
+      console.error("FULL ERROR LOG:", error);
+      return api.sendMessage(`System Error: ${error.message}`, event.threadID, event.messageID);
     }
   }
 };
