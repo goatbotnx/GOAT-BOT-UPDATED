@@ -11,7 +11,7 @@ module.exports = {
     role: 0,
     shortDescription: { en: "Top Richest Leaderboard" },
     longDescription: { en: "Display top richest users with screenshot design." },
-    category: "ECONOMY",
+    category: "RANK",
     guide: { en: "{pn}" }
   },
 
