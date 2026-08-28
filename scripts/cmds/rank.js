@@ -11,7 +11,7 @@ module.exports = {
 		countDown: 3,
 		role: 0,
 		description: "user balance exp rank card",
-		category: "users",
+		category: "RANK",
 		envConfig: { deltaNext: 5 }
 	},
 
