@@ -10,7 +10,7 @@ module.exports = {
 		countDown: 5,
 		role: 0,
 		shortDescription: "Reply supported TTS",
-		category: "FUN & SOCIAL"
+		category: "TTS"
 	},
 
 	onStart: async function ({ message, args, event }) {
