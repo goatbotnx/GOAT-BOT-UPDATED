@@ -1,56 +1,54 @@
 const fs = require("fs-extra");
 const nullAndUndefined = [undefined, null];
-const leven = require('leven');
 
 function getType(obj) {
     return Object.prototype.toString.call(obj).slice(8, -1);
 }
 
-// <<< --- UPDATED: getRole FUNCTION WITH COMPLETE HIERARCHY --- >>>
 function getRole(threadData, senderID) {
     const config = global.GoatBot.config;
-    
-    // Get all role lists from config
-    const creator = config.creator || [];
-    const developer = config.developer || [];
     const adminBot = config.adminBot || [];
-    const premium = config.premium || [];
-    const vipuser = config.vipuser || [];
-    
-    if (!senderID) return 0;
-    
+    const devUsers = config.devUsers || [];
+    const premiumUsers = config.premiumUsers || [];
+    if (!senderID)
+        return 0;
     const adminBox = threadData ? threadData.adminIDs || [] : [];
-    
-    // Role Hierarchy (Higher number = higher permission)
-    // 6 = Creator (Highest)
-    // 5 = Developer
-    // 4 = Admin Bot
-    // 3 = Premium User
-    // 2 = VIP User
-    // 1 = Group Admin
-    // 0 = Normal User (Lowest)
-    
-    if (creator.includes(senderID))
-        return 6;
-    
-    if (developer.includes(senderID))
-        return 5;
-    
-    if (adminBot.includes(senderID))
+
+    if (devUsers.includes(senderID))
         return 4;
-    
-    if (premium.includes(senderID))
+    if (premiumUsers.includes(senderID)) {
+        const userData = global.db.allUserData.find(u => u.userID == senderID);
+        if (userData && userData.data && userData.data.premiumExpireTime) {
+            if (userData.data.premiumExpireTime < Date.now()) {
+                global.temp.expiredPremiumUsers = global.temp.expiredPremiumUsers || [];
+                if (!global.temp.expiredPremiumUsers.includes(senderID)) {
+                    global.temp.expiredPremiumUsers.push(senderID);
+                }
+                return adminBot.includes(senderID) ? 2 : (adminBox.includes(senderID) ? 1 : 0);
+            }
+        }
         return 3;
-    
-    if (vipuser.includes(senderID))
+    }
+    if (adminBot.includes(senderID))
         return 2;
-    
     if (adminBox.includes(senderID))
         return 1;
-    
     return 0;
 }
-// <<< --- END: getRole FUNCTION --- >>>
+
+async function checkMoneyRequirement(userData, requiredMoney) {
+    if (!requiredMoney || requiredMoney <= 0)
+        return true;
+    const userMoney = userData.money || 0;
+    return userMoney >= requiredMoney;
+}
+
+function isAdmin(senderID) {
+    if (!senderID) return false;
+    const config = global.GoatBot.config;
+    const adminBot = config.adminBot || [];
+    return adminBot.includes(senderID);
+}
 
 function getText(type, reason, time, targetID, lang) {
     const utils = global.utils;
@@ -62,12 +60,6 @@ function getText(type, reason, time, targetID, lang) {
         return utils.getText({ lang, head: "handlerEvents" }, "onlyAdminBox");
     else if (type == "onlyAdminBot")
         return utils.getText({ lang, head: "handlerEvents" }, "onlyAdminBot");
-    else if (type == "onlyVipUser")
-        return utils.getText({ lang, head: "handlerEvents" }, "onlyVipUser");
-    else if (type == "onlyDeveloper")
-        return utils.getText({ lang, head: "handlerEvents" }, "onlyDeveloper");
-    else if (type == "onlyCreator")
-        return utils.getText({ lang, head: "handlerEvents" }, "onlyCreator");
 }
 
 function replaceShortcutInLang(text, prefix, commandName) {
@@ -75,6 +67,48 @@ function replaceShortcutInLang(text, prefix, commandName) {
         .replace(/\{(?:p|prefix)\}/g, prefix)
         .replace(/\{(?:n|name)\}/g, commandName)
         .replace(/\{pn\}/g, `${prefix}${commandName}`);
+}
+
+function levenshteinDistance(str1, str2) {
+    const len1 = str1.length;
+    const len2 = str2.length;
+    const matrix = [];
+
+    for (let i = 0; i <= len1; i++) {
+        matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= len2; j++) {
+        matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= len1; i++) {
+        for (let j = 1; j <= len2; j++) {
+            const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
+    }
+
+    return matrix[len1][len2];
+}
+
+function findSimilarCommands(commandName, limit = 1) {
+    const allCommands = Array.from(global.GoatBot.commands.keys());
+    const allAliases = Array.from(global.GoatBot.aliases.keys());
+    const allCommandNames = [...allCommands, ...allAliases];
+
+    const similarities = allCommandNames.map(cmd => ({
+        name: cmd,
+        distance: levenshteinDistance(commandName.toLowerCase(), cmd.toLowerCase())
+    }));
+
+    similarities.sort((a, b) => a.distance - b.distance);
+
+    return similarities.slice(0, limit).filter(s => s.distance <= 3).map(s => s.name);
 }
 
 function getRoleConfig(utils, command, isGroup, threadData, commandName) {
@@ -108,12 +142,8 @@ function getRoleConfig(utils, command, isGroup, threadData, commandName) {
 
 function isBannedOrOnlyAdmin(userData, threadData, senderID, threadID, isGroup, commandName, message, lang) {
     const config = global.GoatBot.config;
-    const { adminBot, developer, creator, vipuser, premium, hideNotiMessage, developerOnly, vipOnly } = config;
-    
-    // Get user's role
-    const role = getRole(threadData, senderID);
+    const { adminBot, hideNotiMessage } = config;
 
-    // check if user banned
     const infoBannedUser = userData.banned;
     if (infoBannedUser.status == true) {
         const { reason, date } = infoBannedUser;
@@ -122,42 +152,16 @@ function isBannedOrOnlyAdmin(userData, threadData, senderID, threadID, isGroup, 
         return true;
     }
 
-    // 1. Check if only Admin Bot (Role 4 and above - AdminBot, Developer, Creator)
     if (
         config.adminOnly.enable == true
         && !adminBot.includes(senderID)
-        && !developer.includes(senderID)
-        && !creator.includes(senderID)
         && !config.adminOnly.ignoreCommand.includes(commandName)
     ) {
         if (hideNotiMessage.adminOnly == false)
-            message.reply(global.utils.getText({ lang, head: "handlerEvents" }, "onlyAdminBot", null, null, null, lang));
-        return true;
-    }
-    
-    // 2. Check for DeveloperOnly mode (Role >= 5 - Developer and Creator)
-    if (
-        (developerOnly?.enable == true)
-        && role < 5
-        && !(developerOnly?.ignoreCommand || []).includes(commandName)
-    ) {
-        if ((hideNotiMessage.developerOnly ?? false) == false) 
-            message.reply(global.utils.getText({ lang, head: "handlerEvents" }, "onlyDeveloper", null, null, null, lang));
-        return true;
-    }
-    
-    // 3. Check for VIPOnly mode (Role >= 2 - VIP, Premium, AdminBot, Developer, Creator)
-    if (
-        (vipOnly?.enable == true)
-        && role < 2
-        && !(vipOnly?.ignoreCommand || []).includes(commandName)
-    ) {
-        if ((hideNotiMessage.vipOnly ?? false) == false)
-            message.reply(global.utils.getText({ lang, head: "handlerEvents" }, "onlyVipUser", null, null, null, lang));
+            message.reply(getText("onlyAdminBot", null, null, null, lang));
         return true;
     }
 
-    // ========== Check Thread ========== //
     if (isGroup == true) {
         if (
             threadData.data.onlyAdminBox === true
@@ -169,7 +173,6 @@ function isBannedOrOnlyAdmin(userData, threadData, senderID, threadID, isGroup, 
             return true;
         }
 
-        // check if thread banned
         const infoBannedThread = threadData.banned;
         if (infoBannedThread.status == true) {
             const { reason, date } = infoBannedThread;
@@ -211,7 +214,6 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 
         const { body, messageID, threadID, isGroup } = event;
 
-        // Check if has threadID
         if (!threadID)
             return;
 
@@ -244,15 +246,11 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
 
         const prefix = getPrefix(threadID);
         const role = getRole(threadData, senderID);
-        
-        // <<< --- NEW: Check if user is Admin (Role >= 4) --- >>>
-        const isAdmin = role >= 4; // AdminBot, Developer, Creator
-        
         const parameters = {
             api, usersData, threadsData, message, event,
             userModel, threadModel, prefix, dashBoardModel,
             globalModel, dashBoardData, globalData, envCommands,
-            envEvents, envGlobal, role, isAdmin, // Added isAdmin to parameters
+            envEvents, envGlobal, role,
             removeCommandNameFromBody: function removeCommandNameFromBody(body_, prefix_, commandName_) {
                 if ([body_, prefix_, commandName_].every(x => nullAndUndefined.includes(x)))
                     throw new Error("Please provide body, prefix and commandName to use this function, this function without parameters only support for onStart");
@@ -261,8 +259,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                         throw new Error(`The parameter "${i + 1}" must be a string, but got "${getType(arguments[i])}"`);
 
                 return body_.replace(new RegExp(`^${prefix_}(\\s+|)${commandName_}`, "i"), "").trim();
-            },
-            mentions: event.mentions || {}
+            }
         };
         const langCode = threadData.data.lang || config.language || "en";
 
@@ -272,55 +269,145 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             };
         }
 
-        /*
-            +-----------------------------------------------+
-            |           WHEN CALL COMMAND                   |
-            +-----------------------------------------------+
-        */
         let isUserCallCommand = false;
+
         async function onStart() {
-            // —————————————— CHECK USE BOT —————————————— //
-            
-            // <<< --- MODIFIED: Allow admins to use commands without prefix --- >>>
-            // If user is admin and body exists, check if it matches any command directly
-            let commandExecuted = false;
-            let commandName = '';
+            if (!body)
+                return;
+
+            const dateNow = Date.now();
+            const { usePrefix = { enable: true, adminUsePrefix: { enable: true, specificUids: [] } } } = config;
+            const isAdminBot = isAdmin(senderID);
+
+            const adminUsePrefixConfig = usePrefix.adminUsePrefix || { enable: true, specificUids: [] };
+            const isSpecificUid = adminUsePrefixConfig.specificUids?.includes(senderID) || false;
+
             let args = [];
+            let commandName = "";
+            let command = null;
+            let usedPrefix = false;
+            let usedAdminPrefix = false;
+
+            const mentions = event.mentions || {};
+            const mentionIDs = Object.keys(mentions);
             
-            if (body) {
-                if (body.startsWith(prefix)) {
-                    // Normal command with prefix
-                    args = body.slice(prefix.length).trim().split(/ +/);
-                    commandName = args.shift().toLowerCase();
-                } else if (isAdmin) {
-                    // Admin trying to use command without prefix
-                    // Check if the first word matches any command
-                    const words = body.trim().split(/ +/);
-                    const potentialCommand = words[0].toLowerCase();
+            if (mentionIDs.length > 0) {
+                event.mentions = mentions;
+            } else if (event.messageReply && event.messageReply.senderID) {
+                event.mentions = { [event.messageReply.senderID]: "" };
+            } else {
+                // FALLBACK: Try to resolve the first tag like @Arisa by looking up group members
+                const tagMatch = body.match(/@([^ ]+)/);
+                if (tagMatch) {
+                    const tagName = tagMatch[1].toLowerCase();
+                    const info = await api.getThreadInfo(threadID);
+                    const userInfo = info.userInfo || [];
+                    const nicknames = info.nicknames || {};
+
+                    // 1. Try nickname match
+                    let foundID = Object.keys(nicknames).find(id => nicknames[id].toLowerCase().includes(tagName));
                     
-                    // Check if it's a valid command
-                    if (GoatBot.commands.has(potentialCommand) || GoatBot.aliases.has(potentialCommand)) {
-                        commandName = potentialCommand;
-                        args = words.slice(1);
-                        commandExecuted = true;
-                    } else {
-                        // Not a command, return
-                        return;
+                    // 2. Try name/firstName match
+                    if (!foundID) {
+                        const user = userInfo.find(u => 
+                            (u.name && u.name.toLowerCase().includes(tagName)) || 
+                            (u.firstName && u.firstName.toLowerCase().includes(tagName))
+                        );
+                        if (user) foundID = user.id;
                     }
-                } else {
-                    // Not a command for normal users
+
+                    if (foundID) {
+                        event.mentions = { [foundID]: "" };
+                    }
+                }
+            }
+
+            const adminPrefix = config.adminPrefix || "$";
+            if (adminPrefix && body.startsWith(adminPrefix)) {
+                if (!isAdminBot) {
+                    return await message.reply("❌ The admin prefix is only available for bot admins. Please use the normal prefix.");
+                }
+                usedAdminPrefix = true;
+                args = body.slice(adminPrefix.length).trim().split(/ +/);
+                commandName = args.shift().toLowerCase();
+                usedPrefix = true;
+            }
+            else if (body.startsWith(prefix)) {
+                usedPrefix = true;
+                args = body.slice(prefix.length).trim().split(/ +/);
+                commandName = args.shift().toLowerCase();
+            }
+            else {
+                let canUseWithoutPrefix = false;
+
+                if ((isAdminBot || isSpecificUid) && adminUsePrefixConfig.enable === false) {
+                    canUseWithoutPrefix = true;
+                }
+
+                if (!canUseWithoutPrefix) {
                     return;
                 }
-            } else {
+
+                const trimmedBody = body.trim();
+                const firstWord = trimmedBody.split(/\s+/)[0].toLowerCase();
+
+                const allCommands = Array.from(GoatBot.commands.keys());
+                const allAliases = Array.from(GoatBot.aliases.keys());
+                const allCommandNames = [...allCommands, ...allAliases];
+
+                if (allCommandNames.includes(firstWord)) {
+                    args = trimmedBody.split(/ +/);
+                    commandName = args.shift().toLowerCase();
+                    usedPrefix = false;
+                } else {
+                    return;
+                }
+            }
+
+            command = GoatBot.commands.get(commandName) || GoatBot.commands.get(GoatBot.aliases.get(commandName));
+
+            if (!command) {
+                if (usedPrefix && !hideNotiMessage.commandNotFound) {
+                    if (!commandName) {
+                        return await message.reply(
+                            utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyPrefix", prefix)
+                        );
+                    } else {
+                        const similarCommands = findSimilarCommands(commandName);
+                        if (similarCommands.length > 0) {
+                            return await message.reply(
+                                utils.getText({ lang: langCode, head: "handlerEvents" }, "commandNotFoundWithSuggestion", commandName, prefix, similarCommands.join(", "))
+                            );
+                        } else {
+                            return await message.reply(
+                                utils.getText({ lang: langCode, head: "handlerEvents" }, "commandNotFound", commandName, prefix)
+                            );
+                        }
+                    }
+                }
                 return;
             }
-            
-            const dateNow = Date.now();
-            
-            // ————————————  CHECK HAS COMMAND ——————————— //
-            let command = GoatBot.commands.get(commandName) || GoatBot.commands.get(GoatBot.aliases.get(commandName));
-            
-            // ———————— CHECK ALIASES SET BY GROUP ———————— //
+
+            let prefixRequired = true;
+
+            if (usePrefix.enable === false) {
+                prefixRequired = false;
+            }
+
+            if ((isAdminBot || isSpecificUid) && adminUsePrefixConfig.enable === false) {
+                prefixRequired = false;
+            }
+
+            if (command.config.usePrefix !== undefined) {
+                if (usePrefix.enable) {
+                    prefixRequired = command.config.usePrefix;
+                }
+            }
+
+            if (prefixRequired && !usedPrefix) {
+                return;
+            }
+
             const aliasesData = threadData.data.aliases || {};
             for (const cmdName in aliasesData) {
                 if (aliasesData[cmdName].includes(commandName)) {
@@ -328,12 +415,10 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                     break;
                 }
             }
-            
-            // ————————————— SET COMMAND NAME ————————————— //
+
             if (command)
                 commandName = command.config.name;
-                
-            // ——————— FUNCTION REMOVE COMMAND NAME ———————— //
+
             function removeCommandNameFromBody(body_, prefix_, commandName_) {
                 if (arguments.length) {
                     if (typeof body_ != "string")
@@ -343,73 +428,64 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                     if (typeof commandName_ != "string")
                         throw new Error(`The third argument (commandName) must be a string, but got "${getType(commandName_)}"`);
 
-                    return body_.replace(new RegExp(`^${prefix_}(\\s+|)${commandName_}`, "i"), "").trim();
-                }
-                else {
-                    return body.replace(new RegExp(`^${prefix}(\\s+|)${commandName}`, "i"), "").trim();
-                }
-            }
-            
-            // —————  CHECK BANNED OR ONLY ADMIN BOX  ————— //
-            if (isBannedOrOnlyAdmin(userData, threadData, senderID, threadID, isGroup, commandName, message, langCode))
-                return;
-                
-            if (!command) {
-                if (commandName) {
-                    const firstLetter = commandName[0].toLowerCase();
-                    const allCommands = Array.from(GoatBot.commands.keys());
-                    const suggestions = allCommands
-                        .filter(cmd => cmd[0].toLowerCase() === firstLetter)
-                        .sort();
-
-                    if (suggestions.length > 0) {
-                        const suggestionList = suggestions.map(cmd => `${prefix}${cmd}`).join("\n");
-                        return await message.reply(
-                            utils.getText({ lang: langCode, head: "handlerEvents" }, "commandNotFoundSuggestions", commandName, suggestionList, prefix)
-                        );
+                    if (usedPrefix) {
+                        if (usedAdminPrefix) {
+                            return body_.replace(new RegExp(`^${adminPrefix}(\\s+|)${commandName_}`, "i"), "").trim();
+                        } else {
+                            return body_.replace(new RegExp(`^${prefix_}(\\s+|)${commandName_}`, "i"), "").trim();
+                        }
+                    } else {
+                        return body_.replace(new RegExp(`^(\\s+|)${commandName_}`, "i"), "").trim();
                     }
                 }
-
-                if (!hideNotiMessage.commandNotFound) {
-                    return await message.reply(
-                        commandName ?
-                            utils.getText({ lang: langCode, head: "handlerEvents" }, "commandNotFound", commandName, prefix) :
-                            utils.getText({ lang: langCode, head: "handlerEvents" }, "commandNotFound2", prefix)
-                    );
-                } else {
-                    return true;
+                else {
+                    if (usedPrefix) {
+                        if (usedAdminPrefix) {
+                            return body.replace(new RegExp(`^${adminPrefix}(\\s+|)${commandName}`, "i"), "").trim();
+                        } else {
+                            return body.replace(new RegExp(`^${prefix}(\\s+|)${commandName}`, "i"), "").trim();
+                        }
+                    } else {
+                        return body.replace(new RegExp(`^(\\s+|)${commandName}`, "i"), "").trim();
+                    }
                 }
             }
-            
-            // ————————————— CHECK PERMISSION ———————————— //
+
+            if (isBannedOrOnlyAdmin(userData, threadData, senderID, threadID, isGroup, commandName, message, langCode))
+                return;
+
+            const requiredMoney = command.config.requiredMoney;
+            if (requiredMoney && requiredMoney > 0) {
+                const hasEnoughMoney = await checkMoneyRequirement(userData, requiredMoney);
+                if (!hasEnoughMoney) {
+                    const userMoney = userData.money || 0;
+                    return await message.reply(
+                        `⚠ | You need at least $${requiredMoney} to use this command.\n` +
+                        `Your balance: $${userMoney}\n` +
+                        `You need $${requiredMoney - userMoney} more.`
+                    );
+                }
+            }
+
             const roleConfig = getRoleConfig(utils, command, isGroup, threadData, commandName);
             const needRole = roleConfig.onStart;
 
             if (needRole > role) {
                 if (!hideNotiMessage.needRoleToUseCmd) {
-                    switch(needRole) {
-                        case 1:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdmin", commandName));
-                        case 2:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyVipUser", commandName));
-                        case 3:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyPremiumUser", commandName));
-                        case 4:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBot", commandName));
-                        case 5:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyDeveloper", commandName));
-                        case 6:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyCreator", commandName));
-                        default:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "noPermission", commandName));
-                    }
+                    if (needRole == 1)
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdmin", commandName));
+                    else if (needRole == 2)
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBot2", commandName));
+                    else if (needRole == 3)
+                        return await message.reply(`🔒 This command requires premium access! (Contact bot admin for premium access).`);
+                    else if (needRole == 4)
+                        return await message.reply(`✖️ This command is only for developers! (Contact with admin).`);
                 }
                 else {
                     return true;
                 }
             }
-            
-            // ———————————————— countDown ———————————————— //
+
             if (!client.countDown[commandName])
                 client.countDown[commandName] = {};
             const timestamps = client.countDown[commandName];
@@ -417,19 +493,30 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             if (!getCoolDown && getCoolDown != 0 || isNaN(getCoolDown))
                 getCoolDown = 1;
             const cooldownCommand = getCoolDown * 1000;
-            
-            // Skip cooldown for admins (optional - you can remove this if you want admins to also have cooldown)
-            if (!isAdmin && timestamps[senderID]) {
+            if (timestamps[senderID]) {
                 const expirationTime = timestamps[senderID] + cooldownCommand;
                 if (dateNow < expirationTime)
                     return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "waitingForCommand", ((expirationTime - dateNow) / 1000).toString().slice(0, 3)));
             }
-            
-            // ——————————————— RUN COMMAND ——————————————— //
+
             const time = getTime("DD/MM/YYYY HH:mm:ss");
             isUserCallCommand = true;
             try {
-                // analytics command call
+                const typingIndicator = config.typingIndicator || {};
+                if (typingIndicator.enable !== false) {
+                    try {
+                        const threadID = event.threadID;
+                        const isTyping = true;
+                        const options = {
+                            duration: typingIndicator.duration || 1000,
+                            autoStop: true
+                        };
+                        api.sendTypingIndicator(threadID, isTyping, options);
+                    } catch (e) {
+                        log.err("TYPING_INDICATOR", `Failed to show typing indicator for command ${commandName}`, e);
+                    }
+                }
+
                 (async () => {
                     const analytics = await globalData.get("analytics", "data", {});
                     if (!analytics[commandName])
@@ -447,13 +534,8 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                     getLang: getText2,
                     removeCommandNameFromBody
                 });
-                
-                // Set cooldown only for non-admins
-                if (!isAdmin) {
-                    timestamps[senderID] = dateNow;
-                }
-                
-                log.info("CALL COMMAND", `${commandName} | ${userData.name} | ${senderID} | ${threadID} | ${args.join(" ")}`);
+                timestamps[senderID] = dateNow;
+                log.info("CALL COMMAND", `${commandName} | ${userData.name} | ${senderID} | ${threadID} | ${args.join(" ")} | ${usedAdminPrefix ? "AdminPrefix" : "NormalPrefix"}`);
             }
             catch (err) {
                 log.err("CALL COMMAND", `An error occurred when calling the command ${commandName}`, err);
@@ -461,11 +543,6 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                    ON CHAT                     |
-         +------------------------------------------------+
-        */
         async function onChat() {
             const allOnChat = GoatBot.onChat || [];
             const args = body ? body.split(/ +/) : [];
@@ -475,9 +552,9 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                     continue;
                 const commandName = command.config.name;
 
-                // —————————————— CHECK PERMISSION —————————————— //
                 const roleConfig = getRoleConfig(utils, command, isGroup, threadData, commandName);
                 const needRole = roleConfig.onChat;
+
                 if (needRole > role)
                     continue;
 
@@ -518,21 +595,16 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                   ON ANY EVENT                 |
-         +------------------------------------------------+
-        */
         async function onAnyEvent() {
             const allOnAnyEvent = GoatBot.onAnyEvent || [];
             let args = [];
-            if (typeof event.body == "string" && (event.body.startsWith(prefix) || isAdmin))
+            if (typeof event.body == "string" && event.body.startsWith(prefix))
                 args = event.body.split(/ +/);
 
             for (const key of allOnAnyEvent) {
                 if (typeof key !== "string")
                     continue;
-                const command = GoatBot.commands.get(key);
+                const command = GoatBot.commands.get(key.toLowerCase());
                 if (!command)
                     continue;
                 const commandName = command.config.name;
@@ -572,11 +644,6 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                  ON FIRST CHAT                 |
-         +------------------------------------------------+
-        */
         async function onFirstChat() {
             const allOnFirstChat = GoatBot.onFirstChat || [];
             const args = body ? body.split(/ +/) : [];
@@ -627,11 +694,6 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                    ON REPLY                    |
-         +------------------------------------------------+
-        */
         async function onReply() {
             if (!event.messageReply)
                 return;
@@ -651,27 +713,19 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                 return log.err("onReply", `Command "${commandName}" not found`, Reply);
             }
 
-            // —————————————— CHECK PERMISSION —————————————— //
             const roleConfig = getRoleConfig(utils, command, isGroup, threadData, commandName);
             const needRole = roleConfig.onReply;
+
             if (needRole > role) {
                 if (!hideNotiMessage.needRoleToUseCmdOnReply) {
-                    switch(needRole) {
-                        case 1:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminToUseOnReply", commandName));
-                        case 2:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyVipUserToUseOnReply", commandName));
-                        case 3:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyPremiumUserToUseOnReply", commandName));
-                        case 4:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBotToUseOnReply", commandName));
-                        case 5:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyDeveloperToUseOnReply", commandName));
-                        case 6:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyCreatorToUseOnReply", commandName));
-                        default:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "noPermissionForReply", commandName));
-                    }
+                    if (needRole == 1)
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminToUseOnReply", commandName));
+                    else if (needRole == 2)
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBot2ToUseOnReply", commandName));
+                    else if (needRole == 3)
+                        return await message.reply(`⚠ | This command requires premium access (Role 3). Contact an admin to get premium status.`);
+                    else if (needRole == 4)
+                        return await message.reply(`⚠ | This command is for developers only (Role 4). Highest permission level required.`);
                 }
                 else {
                     return true;
@@ -702,17 +756,9 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                   ON REACTION                  |
-         +------------------------------------------------+
-        */
         async function onReaction() {
             const { onReaction } = GoatBot;
             const Reaction = onReaction.get(messageID);
-            if (event.reaction === "🗑️" || event.reaction === "delete") {
-                return api.unsendMessage(messageID);
-            }
             if (!Reaction)
                 return;
             Reaction.delete = () => onReaction.delete(messageID);
@@ -727,27 +773,19 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                 return log.err("onReaction", `Command "${commandName}" not found`, Reaction);
             }
 
-            // —————————————— CHECK PERMISSION —————————————— //
             const roleConfig = getRoleConfig(utils, command, isGroup, threadData, commandName);
             const needRole = roleConfig.onReaction;
+
             if (needRole > role) {
                 if (!hideNotiMessage.needRoleToUseCmdOnReaction) {
-                    switch(needRole) {
-                        case 1:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminToUseOnReaction", commandName));
-                        case 2:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyVipUserToUseOnReaction", commandName));
-                        case 3:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyPremiumUserToUseOnReaction", commandName));
-                        case 4:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBotToUseOnReaction", commandName));
-                        case 5:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyDeveloperToUseOnReaction", commandName));
-                        case 6:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyCreatorToUseOnReaction", commandName));
-                        default:
-                            return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "noPermissionForReaction", commandName));
-                    }
+                    if (needRole == 1)
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminToUseOnReaction", commandName));
+                    else if (needRole == 2)
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBot2ToUseOnReaction", commandName));
+                    else if (needRole == 3)
+                        return await message.reply(`⚠ | This command requires premium access (Role 3). Contact an admin to get premium status.`);
+                    else if (needRole == 4)
+                        return await message.reply(`⚠ | This command is for developers only (Role 4). Highest permission level required.`);
                 }
                 else {
                     return true;
@@ -778,27 +816,26 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                 EVENT COMMAND                  |
-         +------------------------------------------------+
-        */
         async function handlerEvent() {
             const { author } = event;
             const allEventCommand = GoatBot.eventCommands.entries();
-            for (const [key, getEvent] of allEventCommand) {
+            for (const [key] of allEventCommand) {
+                const getEvent = GoatBot.eventCommands.get(key);
                 if (!getEvent)
                     continue;
                 const commandName = getEvent.config.name;
                 const getText2 = createGetText2(langCode, `${process.cwd()}/languages/events/${langCode}.js`, prefix, getEvent);
                 const time = getTime("DD/MM/YYYY HH:mm:ss");
                 try {
-                    await getEvent.onStart({
+                    const handler = await getEvent.onStart({
                         ...parameters,
                         commandName,
                         getLang: getText2
                     });
-                    log.info("EVENT COMMAND", `Event: ${commandName} | ${author} | ${userData.name} | ${threadID}`);
+                    if (typeof handler == "function") {
+                        await handler();
+                        log.info("EVENT COMMAND", `Event: ${commandName} | ${author} | ${userData.name} | ${threadID}`);
+                    }
                 }
                 catch (err) {
                     log.err("EVENT COMMAND", `An error occurred when calling the command event ${commandName}`, err);
@@ -807,11 +844,6 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                    ON EVENT                    |
-         +------------------------------------------------+
-        */
         async function onEvent() {
             const allOnEvent = GoatBot.onEvent || [];
             const args = [];
@@ -859,29 +891,14 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             }
         }
 
-        /*
-         +------------------------------------------------+
-         |                    PRESENCE                    |
-         +------------------------------------------------+
-        */
         async function presence() {
             // Your code here
         }
 
-        /*
-         +------------------------------------------------+
-         |                  READ RECEIPT                  |
-         +------------------------------------------------+
-        */
         async function read_receipt() {
             // Your code here
         }
 
-        /*
-         +------------------------------------------------+
-         |                      TYP                       |
-         +------------------------------------------------+
-        */
         async function typ() {
             // Your code here
         }
@@ -900,4 +917,5 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             typ
         };
     };
+
 };
