@@ -1,80 +1,104 @@
-const axios = require('axios');
-const fs = require('fs-extra');
-const path = require('path');
-const stream = require('stream');
-const { promisify } = require('util');
-
-const pipeline = promisify(stream.pipeline);
-const API_ENDPOINT = "https://metabyneokex.vercel.app/videos/generate";
-const CACHE_DIR = path.join(__dirname, 'cache');
+const axios = require("axios");
+const fs = require("fs-extra");
+const path = require("path");
 
 module.exports = {
   config: {
     name: "animate",
-    aliases: ["anim", "video", "genvid"],
-    version: "1.1",
-    author: "Neoaz ゐ",
-    countDown: 30,
+    version: "1.0",
+    author: "xalman",
+    countDown: 10,
     role: 0,
-    longDescription: "Generate animated videos from text prompts using AI.",
-    category: "AI & IMAGE GENERATION",
-    guide: {
-      en: "{pn} <prompt>\n\nExample: {pn} waves crashing on a beach at sunset"
-    }
+    shortDescription: "Animate an image using Wan-Video AI",
+    longDescription: "Reply to an image with a prompt to generate an animated video",
+    category: "AI & MEDIA",
+    guide: "{pn} <prompt>\nExample: /animate cinematic motion\nReply to an image to animate it."
   },
 
-  onStart: async function ({ args, message, event, api }) {
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID, messageReply } = event;
+    const cacheDir = path.join(__dirname, "cache");
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+    if (!messageReply || !messageReply.attachments || messageReply.attachments.length === 0) {
+      return api.sendMessage("❌ Please reply to an image.", threadID, messageID);
+    }
+
+    const attachment = messageReply.attachments[0];
+    if (attachment.type !== "photo" && attachment.type !== "animated_image") {
+      return api.sendMessage("❌ Please reply to an image (photo).", threadID, messageID);
+    }
+
     const prompt = args.join(" ").trim();
-
     if (!prompt) {
-      return message.reply("Please provide a prompt to generate a video.");
+      return api.sendMessage("✨ Please enter a prompt!\nExample: /animate cinematic motion", threadID, messageID);
     }
 
-    if (!fs.existsSync(CACHE_DIR)) {
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
-    }
+    const imageUrl = attachment.url;
 
-    api.setMessageReaction("⏳", event.messageID, () => {}, true);
-    let tempFilePath;
+    api.setMessageReaction("⏳", messageID, () => {}, true);
 
-    try {
-      const fullApiUrl = `${API_ENDPOINT}?prompt=${encodeURIComponent(prompt)}&orientation=VERTICAL`;
+    const maxRetries = 2;
+    let lastError = null;
 
-      const apiResponse = await axios.get(fullApiUrl, { timeout: 150000 });
-      const data = apiResponse.data;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const apiUrl = `https://xalman-apis.vercel.app/api/animate?image=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`;
 
-      if (!data.success || !data.video_urls || data.video_urls.length === 0) {
-        throw new Error("API failed");
+        const response = await axios.get(apiUrl, {
+          timeout: 120000,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "video/*, application/json"
+          },
+          responseType: "arraybuffer"
+        });
+
+        const contentType = response.headers["content-type"] || "";
+
+        if (contentType.includes("video")) {
+          const ext = contentType.split("/")[1]?.split(";")[0] || "mp4";
+          const filePath = path.join(cacheDir, `animate_${Date.now()}.${ext}`);
+          fs.writeFileSync(filePath, Buffer.from(response.data));
+
+          api.setMessageReaction("✅", messageID, () => {}, true);
+
+          const msg = `🎬 𝗔𝗡𝗜𝗠𝗔𝗧𝗘𝗗 𝗩𝗜𝗗𝗘𝗢\n━━━━━━━━━━━━━━━━━━\n📝 Prompt: ${prompt}`;
+
+          return api.sendMessage(
+            {
+              body: msg,
+              attachment: fs.createReadStream(filePath)
+            },
+            threadID,
+            () => {
+              if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            },
+            messageID
+          );
+        } else {
+          const textData = response.data.toString("utf8");
+          try {
+            const jsonData = JSON.parse(textData);
+            if (jsonData.status === false) {
+              throw new Error(jsonData.message || "API error");
+            } else {
+              throw new Error(textData.substring(0, 200) || "Invalid API response");
+            }
+          } catch (parseError) {
+            throw new Error(textData.substring(0, 200) || "Invalid API response");
+          }
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          continue;
+        }
       }
-
-      const videoUrl = data.video_urls[0];
-
-      const videoDownloadResponse = await axios.get(videoUrl, {
-        responseType: 'stream',
-        timeout: 120000,
-      });
-
-      const fileHash = Date.now() + Math.random().toString(36).substring(2, 8);
-      tempFilePath = path.join(CACHE_DIR, `animate_${fileHash}.mp4`);
-
-      await pipeline(videoDownloadResponse.data, fs.createWriteStream(tempFilePath));
-
-      api.setMessageReaction("✅", event.messageID, () => {}, true);
-
-      await message.reply({
-        body: "Video generated 🎬",
-        attachment: fs.createReadStream(tempFilePath)
-      });
-
-    } catch (error) {
-      api.setMessageReaction("❌", event.messageID, () => {}, true);
-      message.reply("Failed to generate video.");
-    } finally {
-      if (tempFilePath && fs.existsSync(tempFilePath)) {
-        try {
-          fs.unlinkSync(tempFilePath);
-        } catch (err) {}
-      }
     }
+
+    api.setMessageReaction("❌", messageID, () => {}, true);
+    return api.sendMessage("❌ Failed to animate image.", threadID, messageID);
   }
 };
