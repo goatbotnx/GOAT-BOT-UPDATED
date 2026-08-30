@@ -100,6 +100,25 @@ The project provides a command-based architecture with support for automation, A
 </tr>
 </table>---
 
+
+### 🧠 Smart Role System
+Five clean permission tiers, checked in strict priority order.
+
+| Role | Level | Source |
+|---|:---:|---|
+| Developer | **4** | `devUsers` |
+| Premium | **3** | `premiumUsers` |
+| Bot Admin | **2** | `adminBot` |
+| Group Admin | **1** | thread's own admin list |
+| Member | **0** | default |
+
+</td>
+</tr>
+</table>
+
+---
+
+
 🎨 Project Identity
 
 <div align="center">| 
