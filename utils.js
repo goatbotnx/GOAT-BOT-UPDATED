@@ -248,87 +248,6 @@ const word = [
 const regCheckURL =
         /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
 
-const outgoingFontMap = {
-         A: "A", B: "B", C: "C", D: "D", E: "E", F: "F", G: "G", H: "H", I: "I", J: "J",
-        K: "K", L: "L", M: "M", N: "N", O: "O", P: "P", Q: "Q", R: "R", S: "S", T: "T",
-        U: "U", V: "V", W: "W", X: "X", Y: "Y", Z: "Z",
-        a: "a", b: "b", c: "c", d: "d", e: "e", f: "f", g: "g", h: "h", i: "i", j: "j",
-        k: "k", l: "l", m: "m", n: "n", o: "o", p: "p", q: "q", r: "r", s: "s", t: "t",
-        u: "u", v: "v", w: "w", x: "x", y: "y", z: "z",
-        0: "0", 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9"
-};
-
-const oldFontTables = [
-        ["𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
-        ["𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇", "abcdefghijklmnopqrstuvwxyz"],
-        ["𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵", "0123456789"],
-        ["𝙰𝙱𝙲𝙳𝙴𝙵𝙶𝙷𝙸𝙹𝙺𝙻𝙼𝙽𝙾𝙿𝚀𝚁𝚂𝚃𝚄𝚅𝚆𝚇𝚈𝚉", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
-        ["𝚊𝚋𝚌𝚍𝚎𝚏𝚐𝚑𝚒𝚓𝚔𝚕𝚖𝚗𝚘𝚙𝚚𝚛𝚜𝚝𝚞𝚟𝚠𝚡𝚢𝚣", "abcdefghijklmnopqrstuvwxyz"],
-        ["𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿", "0123456789"],
-        ["𝘼𝘽𝘾𝘿𝙀𝙁𝙂𝙃𝙄𝙅𝙆𝙇𝙈𝙉𝙊𝙋𝙌𝙍𝙎𝙏𝙐𝙑𝙒𝙓𝙔𝙕", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
-        ["𝙖𝙗𝙘𝙙𝙚𝙛𝙜𝙝𝙞𝙟𝙠𝙡𝙢𝙣𝙤𝙥𝙦𝙧𝙨𝙩𝙪𝙫𝙬𝙭𝙮𝙯", "abcdefghijklmnopqrstuvwxyz"],
-        ["𝘈𝘉𝘊𝘋𝘌𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗𝘘𝘙𝘚𝘛𝘜𝘝𝘞𝘟𝘠𝘡", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
-        ["𝘢𝘣𝘤𝘥𝘦𝘧𝘨𝘩𝘪𝘫𝘬𝘭𝘮𝘯𝘰𝘱𝘲𝘳𝘴𝘵𝘶𝘷𝘸𝘹𝘺𝘻", "abcdefghijklmnopqrstuvwxyz"]
-];
-
-const oldFontMap = oldFontTables.reduce((map, [styled, plain]) => {
-        const styledChars = Array.from(styled);
-        const plainChars = Array.from(plain);
-        styledChars.forEach((char, index) => {
-                map[char] = plainChars[index];
-        });
-        return map;
-}, {});
-
-function toGlobalFontStyle(text) {
-        if (typeof text !== "string")
-                return text;
-        const urlRegex = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/g;
-        const parts = [];
-        let lastIndex = 0;
-        let match;
-        while ((match = urlRegex.exec(text)) !== null) {
-                if (match.index > lastIndex) {
-                        const chunk = text.slice(lastIndex, match.index);
-                        parts.push(Array.from(chunk).map(c => outgoingFontMap[oldFontMap[c] || c] || oldFontMap[c] || c).join(""));
-                }
-                parts.push(match[0]);
-                lastIndex = match.index + match[0].length;
-        }
-        if (lastIndex < text.length) {
-                const chunk = text.slice(lastIndex);
-                parts.push(Array.from(chunk).map(c => outgoingFontMap[oldFontMap[c] || c] || oldFontMap[c] || c).join(""));
-        }
-        return parts.join("");
-}
-
-function formatOutgoingMessage(form) {
-        if (typeof form === "string")
-                return toGlobalFontStyle(form);
-        if (form && typeof form === "object" && form.skipFontStyle === true) {
-                const { skipFontStyle, ...messageForm } = form;
-                return messageForm;
-        }
-        if (form && typeof form === "object" && typeof form.body === "string")
-                return {
-                        ...form,
-                        body: toGlobalFontStyle(form.body)
-                };
-        return form;
-}
-
-function applyGlobalFontStyle(api) {
-        if (!api || typeof api.sendMessage !== "function" || api.__globalFontStyleApplied)
-                return api;
-        const sendMessage = api.sendMessage.bind(api);
-        api.sendMessagePlain = sendMessage;
-        api.sendMessage = function (form, ...args) {
-                return sendMessage(formatOutgoingMessage(form), ...args);
-        };
-        api.__globalFontStyleApplied = true;
-        return api;
-}
-
 class CustomError extends Error {
         constructor(obj) {
                 if (typeof obj === "string") obj = { message: obj };
@@ -1479,9 +1398,6 @@ const utils = {
         getText: require("./languages/makeFuncGetLangs.js"),
         getTime,
         getType,
-        toGlobalFontStyle,
-        formatOutgoingMessage,
-        applyGlobalFontStyle,
         isHexColor,
         isNumber,
         jsonStringifyColor,
