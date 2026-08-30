@@ -7,7 +7,7 @@ module.exports = {
     role: 0,
     shortDescription: "Random hentai image",
     longDescription: "Get hentai image from API",
-    category: "18+",
+    category: "NSFW",
     guide: "{pn}"
   },
 
