@@ -3,7 +3,7 @@ const moment = require("moment-timezone");
 module.exports = {
   config: {
     name: "pending",
-    version: "2.3",
+    version: "2.4",
     author: "xalman",
     countDown: 5,
     role: 2,
@@ -29,7 +29,7 @@ module.exports = {
     const input = event.body.trim();
     const { threadID, messageID } = event;
     const prefix = global.GoatBot?.config?.prefix || "/";
-    const botNickname = "🎀♡nx λi♡🦋くめ";
+    const botNickname = global.GoatBot?.config?.nickNameBot || "GOAT BOT";
     let done = 0;
 
     const dateTime = moment()
@@ -45,17 +45,31 @@ module.exports = {
 
         const targetThreadID = Reply.queue[n - 1].threadID;
 
-        api.sendMessage(
+        try {
+          await api.handleMessageRequest(targetThreadID, false);
+        } catch (e) {
+          console.log(`Failed to decline pending request for ${targetThreadID}: `, e);
+        }
+
+        try {
+          api.sendMessage(
 `╭─🚫 ACCESS DENIED 🚫─╮
 │ 🤖 Bot : Refused
 │ 🔗 Prefix : ${prefix}
-│ ⚡ Owner : xalman
 │ ⏰ Date/Time : ${dateTime}
 ╰──────────────────╯`,
-          targetThreadID
-        );
+            targetThreadID
+          );
+        } catch (e) {
+          console.log(`Failed to notify ${targetThreadID}: `, e);
+        }
 
-        await api.removeUserFromGroup(api.getCurrentUserID(), targetThreadID);
+        try {
+          await api.removeUserFromGroup(api.getCurrentUserID(), targetThreadID);
+        } catch (e) {
+          console.log(`Failed to leave group ${targetThreadID}: `, e);
+        }
+
         done++;
       }
 
@@ -74,11 +88,16 @@ module.exports = {
       const targetThreadID = Reply.queue[n - 1].threadID;
       const botID = api.getCurrentUserID();
 
+      try {
+        await api.handleMessageRequest(targetThreadID, true);
+      } catch (e) {
+        console.log(`Failed to accept pending request for ${targetThreadID}: `, e);
+      }
+
       api.sendMessage(
 `╭─✨ SYSTEM GOAT ✨─╮
 │ 🤖 Bot : Activated
 │ 🔗 Prefix : ${prefix}
-│ ⚡ Owner : xalman
 │ ⏰ Date/Time : ${dateTime}
 ╰─✅ Access Granted─╯`,
         targetThreadID
