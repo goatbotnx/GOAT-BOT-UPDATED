@@ -1,7 +1,7 @@
 {
   "facebookAccount": {
-    "email": "xadikaxara@gmail.com",
-    "password": "xadikax210",
+    "email": "",
+    "password": "",
     "2FASecret": "",
     "i_user": "",
     "proxy": null,
@@ -16,28 +16,21 @@
     "enable": false,
     "ignoreCommand": []
   },
-  "developerOnly": {
+  "typingIndicator": {
     "enable": false,
-    "ignoreCommand": []
-  },
-  "vipOnly": {
-    "enable": false,
-    "ignoreCommand": []
+    "duration": 1000
   },
   "adminBot": [
-    "61592084390757"
+    "61593683823942"
   ],
-  "developer": [
-    "61592084390757"
+  "devUsers": [
+    "61593683823942"
+  ],
+  "premiumUsers": [
+    "61593683823942"
   ],
   "vipuser": [
-    "61592084390757"
-  ],
-  "premium": [
-    "61592084390757"
-  ],
-  "creator": [
-    "61592084390757"
+    "61593683823942"
   ],
   "reactBy": {
     "delete": [
@@ -67,6 +60,15 @@
   },
   "nickNameBot": "🎀♡nx λi♡🦋くめ",
   "prefix": "/",
+  "usePrefix": {
+    "enable": true,
+    "notes": "if enable is set to false, NO ONE needs a prefix to use commands (global no-prefix mode). Leave this true and use adminUsePrefix below instead for admin-only no-prefix.",
+    "adminUsePrefix": {
+      "enable": true,
+      "notes": "set enable to false to let bot admins (and specificUids below) use commands WITHOUT typing the prefix. Set to true to require the prefix from everyone as normal.",
+      "specificUids": []
+    }
+  },
   "database": {
     "type": "sqlite",
     "uriMongodb": "",
@@ -181,8 +183,5 @@
     "autoMarkDelivery": true,
     "autoReconnect": true,
     "notes": "Document here: https://github.com/ntkhang03/fb-chat-api/blob/master/DOCS.md#apisetoptionsoptions "
-  },
-  "devUsers": [
-    "61592084390757"
-  ]
+  }
 }
