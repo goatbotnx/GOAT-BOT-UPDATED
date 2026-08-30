@@ -105,8 +105,7 @@ The project provides a command-based architecture with support for automation, A
 <div align="center">| 
 🐐 Project| GOAT-BOT-UPDATED
 👨‍💻 Developer| NX / XALMAN
-🏷️ Version| 3.0.0
-🟢 Node.js| 20.x
+🟢 Node.js| 22.x
 📜 License| MIT
 
 </div>---
