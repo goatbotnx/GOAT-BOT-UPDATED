@@ -5,7 +5,7 @@ module.exports = {
     version: "2.0",
     author: "xalman",
     countDown: 5,
-    role: 0,
+    role: 4,
     shortDescription: "Switch bot account",
     longDescription: "Switch between account.txt and account2.txt",
     category: "system",
