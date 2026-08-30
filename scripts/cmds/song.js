@@ -11,7 +11,7 @@ module.exports = {
     role: 0,
     shortDescription: { en: "Search and play a song from SoundCloud" },
     longDescription: { en: "Fetches a matching song and sends the audio" },
-    category: "MEDIA",
+    category: "ANIME & MEDIA",
     guide: { en: "{pn} <song name>" }
   },
 
