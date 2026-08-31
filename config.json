@@ -17,7 +17,7 @@
     "ignoreCommand": []
   },
   "typingIndicator": {
-    "enable": false,
+    "enable": true,
     "duration": 1000
   },
   "adminBot": [
@@ -64,7 +64,7 @@
     "enable": true,
     "notes": "if enable is set to false, NO ONE needs a prefix to use commands (global no-prefix mode). Leave this true and use adminUsePrefix below instead for admin-only no-prefix.",
     "adminUsePrefix": {
-      "enable": true,
+      "enable": false,
       "notes": "set enable to false to let bot admins (and specificUids below) use commands WITHOUT typing the prefix. Set to true to require the prefix from everyone as normal.",
       "specificUids": []
     }
