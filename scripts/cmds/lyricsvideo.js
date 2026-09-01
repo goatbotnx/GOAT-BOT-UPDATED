@@ -42,12 +42,12 @@ module.exports = {
       let selectedVideo = null;
       for (const video of results) {
         const title = (video.title || "").toLowerCase();
-        if  (title.includes("লিরিক্স") || (title.includes("lyricsvideo") || (title.includes("lyrics") || title.includes("#lyrics")) {
+        if (title.includes("লিরিক্স") || title.includes("lyricsvideo") || title.includes("lyrics") || title.includes("#lyrics")) {
           selectedVideo = video;
           break;
         }
       }
-        
+
       if (!selectedVideo) {
         selectedVideo = results[Math.floor(Math.random() * results.length)];
       }
