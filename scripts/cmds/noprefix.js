@@ -4,7 +4,7 @@ module.exports = {
   config: {
     name: "noprefix",
     aliases: ["adminnoprefix", "npx"],
-    version: "1.0",
+    version: "1.5",
     author: "xalman",
     countDown: 5,
     role: 2,
@@ -15,8 +15,8 @@ module.exports = {
       en:
         "   {pn} on → admins can use commands without prefix\n" +
         "   {pn} off → admins must use the prefix again\n" +
-        "   {pn} add <uid> → also allow this UID to skip the prefix\n" +
-        "   {pn} remove <uid> → remove that UID's no-prefix access\n" +
+        "   {pn} add <@mention/reply/UID> → allow this user to skip the prefix\n" +
+        "   {pn} remove <@mention/reply/UID> → remove user's no-prefix access\n" +
         "   {pn} list → show current status + allowed UIDs\n" +
         "   {pn} (no args) → show current status"
     }
@@ -26,7 +26,7 @@ module.exports = {
     en: {
       turnedOn: "✅ Admin no-prefix mode is now ON.\nBot admins can use commands without typing \"%1\".",
       turnedOff: "🚫 Admin no-prefix mode is now OFF.\nEveryone (including admins) must use the prefix \"%1\" again.",
-      invalidUid: "❌ Please provide a valid UID. Example: %1noprefix add 100012345678",
+      invalidUid: "❌ Please mention a user, reply to a message, or provide a valid UID.\nExample: %1noprefix add @user / 100012345678",
       addSuccess: "✅ UID %1 can now use commands without a prefix.",
       alreadyAdded: "ℹ️ UID %1 is already in the no-prefix list.",
       removeSuccess: "✅ UID %1 removed from the no-prefix list.",
@@ -35,9 +35,10 @@ module.exports = {
     }
   },
 
-  onStart: async function ({ args, message, getLang, prefix, commandName }) {
+  onStart: async function ({ args, message, event, getLang, prefix, commandName }) {
     const { config } = global.GoatBot;
     const { client } = global;
+    const { mentions, type, messageReply } = event;
 
     if (!config.usePrefix)
       config.usePrefix = { enable: true };
@@ -61,9 +62,22 @@ module.exports = {
       return message.reply(getLang("turnedOff", prefix));
     }
 
+    const getTargetUID = () => {
+      if (type === "message_reply" && messageReply?.senderID) {
+        return messageReply.senderID;
+      }
+      if (mentions && Object.keys(mentions).length > 0) {
+        return Object.keys(mentions)[0];
+      }
+      if (args[1] && !isNaN(args[1])) {
+        return args[1];
+      }
+      return null;
+    };
+
     if (sub === "add") {
-      const uid = args[1];
-      if (!uid || isNaN(uid))
+      const uid = getTargetUID();
+      if (!uid)
         return message.reply(getLang("invalidUid", prefix));
 
       if (adminUsePrefix.specificUids.includes(uid))
@@ -75,8 +89,8 @@ module.exports = {
     }
 
     if (sub === "remove") {
-      const uid = args[1];
-      if (!uid || isNaN(uid))
+      const uid = getTargetUID();
+      if (!uid)
         return message.reply(getLang("invalidUid", prefix));
 
       if (!adminUsePrefix.specificUids.includes(uid))
