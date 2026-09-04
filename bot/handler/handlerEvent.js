@@ -325,7 +325,7 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
             const adminPrefix = config.adminPrefix || "$";
             if (adminPrefix && body.startsWith(adminPrefix)) {
                 if (!isAdminBot) {
-                    return await message.reply("❌ The admin prefix is only available for bot admins. Please use the normal prefix.");
+                    return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminPrefix"));
                 }
                 usedAdminPrefix = true;
                 args = body.slice(adminPrefix.length).trim().split(/ +/);
@@ -477,9 +477,9 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
                     else if (needRole == 2)
                         return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyAdminBot2", commandName));
                     else if (needRole == 3)
-                        return await message.reply(`🔒 This command requires premium access! (Contact bot admin for premium access).`);
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyPremium", commandName));
                     else if (needRole == 4)
-                        return await message.reply(`✖️ This command is only for developers! (Contact with admin).`);
+                        return await message.reply(utils.getText({ lang: langCode, head: "handlerEvents" }, "onlyDeveloper", commandName));
                 }
                 else {
                     return true;
@@ -757,6 +757,15 @@ module.exports = function (api, threadModel, userModel, dashBoardModel, globalMo
         }
 
         async function onReaction() {
+            // Mirror system: if a bot admin reacts to ANY message, the bot reacts the same way
+            if (
+                config.reactionMirror?.enable !== false &&
+                event.reaction && senderID != api.getCurrentUserID() && isAdmin(senderID)
+            ) {
+                api.setMessageReaction(event.reaction, messageID, () => { }, true)
+                    .catch(err => log.err("onReaction", "Failed to mirror admin reaction", err));
+            }
+
             const { onReaction } = GoatBot;
             const Reaction = onReaction.get(messageID);
             if (!Reaction)
