@@ -20,6 +20,9 @@
     "enable": true,
     "duration": 2000
   },
+  "reactionMirror": {
+    "enable": true
+  },
   "adminBot": [
     "61593683823942"
   ],
