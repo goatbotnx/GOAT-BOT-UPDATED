@@ -1,16 +1,39 @@
 const axios = require("axios");
 
+const CATEGORY_ALIASES = {
+  bn: "bn",
+  bangla: "bn",
+  bengali: "bn",
+  en: "en",
+  english: "en",
+  math: "math",
+  maths: "math",
+  mathematics: "math"
+};
+
+const CATEGORY_LABELS = {
+  bn: "🇧🇩 Bangla",
+  en: "🇬🇧 English",
+  math: "🧮 Math"
+};
+
+function normalizeCategory(input) {
+  if (!input) return null;
+  const key = String(input).toLowerCase().trim();
+  return CATEGORY_ALIASES[key] || null;
+}
+
 module.exports = {
   config: {
     name: "quiz",
     aliases: ["qz"],
-    version: "6.0",
+    version: "8.0",
     author: "xalman",
     countDown: 5,
     role: 0,
     description: "Play a random quiz with elegant design and automatic clean-up",
     category: "GAMES",
-    guide: "{pn} | {pn} list"
+    guide: "{pn} : random bangla quiz\n{pn} bn / bangla : bangla quiz\n{pn} en / english : english quiz\n{pn} math : math quiz\n{pn} list : total questions (all categories)\n{pn} list <category> : total questions in a category"
   },
 
   onStart: async function ({ event, message, args, api }) {
@@ -18,19 +41,62 @@ module.exports = {
     const BASE_URL = "https://xalman-apis.vercel.app/api/quiz";
 
     if (args[0] === "list" || args[0] === "total") {
+      const rawCategory = args[1];
+      const category = normalizeCategory(rawCategory);
+
+      if (rawCategory && !category) {
+        return message.reply(
+          `❌ Invalid category: "${rawCategory}"\n✅ Valid categories: bn/bangla, en/english, math`
+        );
+      }
+
       try {
-        const res = await axios.get(`${BASE_URL}?list=true`);
-        const listMsg = `📊 𝗤𝗨𝗜𝗭 𝗦𝗧𝗔𝗧𝗜𝗦𝗧𝗜𝗖𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n📝 Total Questions : ${res.data.total_questions}\n👤 Database Author : ${res.data.author}\n🟢 System Status   : Active\n━━━━━━━━━━━━━━━━━━━━━━`;
+        const url = category
+          ? `${BASE_URL}?list=true&category=${category}`
+          : `${BASE_URL}?list=true`;
+        const res = await axios.get(url);
+        const data = res.data;
+
+        let listMsg;
+        if (data.by_category) {
+          listMsg =
+            `📊 𝗤𝗨𝗜𝗭 𝗦𝗧𝗔𝗧𝗜𝗦𝗧𝗜𝗖𝗦\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `📝 Total Questions : ${data.total_questions}\n` +
+            `🇧🇩 Bangla : ${data.by_category.bn}\n` +
+            `🇬🇧 English : ${data.by_category.en}\n` +
+            `🧮 Math : ${data.by_category.math}\n` +
+            `👤 Database Author : ${data.author}\n` +
+            `🟢 System Status   : Active\n━━━━━━━━━━━━━━━━━━━━━━`;
+        } else {
+          listMsg =
+            `📊 𝗤𝗨𝗜𝗭 𝗦𝗧𝗔𝗧𝗜𝗦𝗧𝗜𝗖𝗦 (${data.category})\n━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `📝 Total Questions : ${data.total_questions}\n` +
+            `👤 Database Author : ${data.author}\n` +
+            `🟢 System Status   : Active\n━━━━━━━━━━━━━━━━━━━━━━`;
+        }
         return message.reply(listMsg);
       } catch (e) {
         return message.reply("❌ Unable to fetch quiz database information.");
       }
     }
 
+    const rawCategory = args[0];
+    const requestedCategory = normalizeCategory(rawCategory);
+
+    if (rawCategory && !requestedCategory) {
+      return message.reply(
+        `❌ Invalid category: "${rawCategory}"\n✅ Valid categories: bn/bangla, en/english, math\n\n` +
+        `Usage:\n${this.config.guide.replace(/{pn}/g, this.config.name)}`
+      );
+    }
+
     try {
-      const res = await axios.get(BASE_URL);
+      const url = requestedCategory ? `${BASE_URL}?category=${requestedCategory}` : BASE_URL;
+      const res = await axios.get(url);
       const quiz = res.data;
       if (!quiz.status) return message.reply("❌ API returned an invalid response.");
+
+      const categoryLabel = CATEGORY_LABELS[quiz.category] || quiz.category;
 
       const labels = ["A", "B", "C", "D"];
       let optionsText = "";
@@ -38,7 +104,7 @@ module.exports = {
         optionsText += `🔠 [ ${labels[index]} ] : ${opt}\n`;
       });
 
-      const msgText = `🧠 𝗤𝗨𝗜𝗭 𝗖𝗛𝗔𝗟𝗟𝗘𝗡𝗚𝗘\n━━━━━━━━━━━━━━━━━━━━━━\n❓ 𝗤𝗨𝗘𝗦𝗧𝗜𝗢𝗡:\n${quiz.question}\n\n📝 𝗢𝗣𝗧𝗜𝗢𝗡𝗦:\n${optionsText}\n━━━━━━━━━━━━━━━━━━━━━━\n⏳ You have 60 seconds to reply with the correct letter (A, B, C, or D).\n`;
+      const msgText = `🧠 𝗤𝗨𝗜𝗭 𝗖𝗛𝗔𝗟𝗟𝗘𝗡𝗚𝗘 (${categoryLabel})\n━━━━━━━━━━━━━━━━━━━━━━\n❓ 𝗤𝗨𝗘𝗦𝗧𝗜𝗢𝗡:\n${quiz.question}\n\n📝 𝗢𝗣𝗧𝗜𝗢𝗡𝗦:\n${optionsText}\n━━━━━━━━━━━━━━━━━━━━━━\n⏳ You have 60 seconds to reply with the correct letter (A, B, C, or D).\n`;
 
       return message.reply(msgText, (err, info) => {
         if (err) return;
