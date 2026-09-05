@@ -1,4 +1,4 @@
-Cmd install baby.js const axios = require('axios');
+const axios = require('axios');
 
 const PRIMARY_API = "https://noobs-api.top/dipto";
 const SECONDARY_API = "https://baby-apisx.vercel.app";
