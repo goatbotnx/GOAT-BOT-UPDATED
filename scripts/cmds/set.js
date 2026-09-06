@@ -2,7 +2,7 @@ module.exports = {
   config: {
     name: "set",
     aliases: ["ap"],
-    version: "3.3",
+    version: "3.5",
     author: "xalman",
     role: 0,
     shortDescription: { en: "Modify user money or exp" },
@@ -13,8 +13,11 @@ module.exports = {
 
   onStart: async ({ args, event, api, usersData }) => {
 
-    const ADMINS = new Set(["61563031767871", "61592084390757"]);
-    if (!ADMINS.has(event.senderID)) {
+    const { config } = global.GoatBot;
+    const OWNER = config.adminBot?.[0];
+    const devUsers = config.devUsers || [];
+    const permitted = (OWNER && event.senderID === OWNER) || devUsers.includes(event.senderID);
+    if (!permitted) {
       return api.sendMessage("🚫 Access denied.", event.threadID, event.messageID);
     }
 
