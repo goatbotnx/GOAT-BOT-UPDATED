@@ -6,7 +6,7 @@ module.exports = {
   config: {
     name: "install",
     aliases: ["replace", "load"],
-    version: "1.1",
+    version: "1.2",
     author: "DUR4NTO",
     countDown: 3,
     role: 0,
@@ -17,10 +17,12 @@ module.exports = {
 
   onStart: async function ({ message, args, event }) {
 
-    const DEV = global.GoatBot?.config?.DEV || [];
-    const EXTRA_UID = "61570641868681";
+    const { config } = global.GoatBot;
+    const OWNER = config.adminBot?.[0];
+    const devUsers = config.devUsers || [];
+    const permitted = (OWNER && event.senderID === OWNER) || devUsers.includes(event.senderID);
 
-    if (!DEV.includes(event.senderID) && event.senderID !== EXTRA_UID)
+    if (!permitted)
       return message.reply("❌ DEV only");
 
     let filePathArg = args[0];
