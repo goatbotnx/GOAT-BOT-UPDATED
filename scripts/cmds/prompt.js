@@ -10,7 +10,7 @@ module.exports = {
     role: 0,
     shortDescription: "Generate prompt from image",
     longDescription: "Generate an AI prompt from a replied image",
-    category: "AI"
+    category: "AI & IMAGE GENERATION"
   },
 
   onStart: async function ({ api, event }) {
