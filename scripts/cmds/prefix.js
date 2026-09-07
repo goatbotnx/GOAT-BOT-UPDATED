@@ -18,7 +18,7 @@ module.exports = {
 		countDown: 5,
 		role: 0,
 		description: "Change & show bot prefix ",
-		category: "config"
+		category: "system"
 	},
 
 	langs: {
