@@ -16,7 +16,7 @@ module.exports = {
     version: "2.0",
     author: "xalman",
     role: 0,
-    countDown: 10,
+    countDown: 5,
     category: "GAMES",
     guide: {
       en: "{pn} <amount>"
