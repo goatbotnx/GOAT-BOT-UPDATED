@@ -10,7 +10,7 @@ module.exports = {
     version: "2.1",
     author: "xalman",
     description: "Random K-Pop Matching Couple DP",
-    category: "FUN",
+    category: "FUN & SOCIAL",
     cooldown: 5,
     guide: {
       en: "{pn} - Random K-Pop Couple DP\n{pn} list - Show total available Couple DPs"
