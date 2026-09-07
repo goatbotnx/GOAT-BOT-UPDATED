@@ -3,121 +3,200 @@ const path = require("path");
 const axios = require("axios");
 const cheerio = require("cheerio");
 
+const EVENTS_DIR = path.join(__dirname, "..", "events");
+
 function getDomain(url) {
-	const regex = /^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:/\n]+)/im;
-	const match = url.match(regex);
+	const match = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:/\n]+)/im);
 	return match ? match[1] : null;
+}
+
+function isURL(str) {
+	try {
+		new URL(str);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function unloadEvent(fileName, configCommands, getLang) {
+	const GoatBot = global.GoatBot;
+	try {
+		const eventName = fileName.toLowerCase();
+		const eventCommand = GoatBot.eventCommands.get(eventName);
+		if (!eventCommand)
+			throw new Error(getLang("missingFile", `${fileName}.js`));
+
+		GoatBot.eventCommands.delete(eventName);
+
+		const entryIndex = GoatBot.eventCommandsFilesPath.findIndex(item => item.commandName.includes(eventName));
+		if (entryIndex !== -1) {
+			delete require.cache[require.resolve(GoatBot.eventCommandsFilesPath[entryIndex].filePath)];
+			GoatBot.eventCommandsFilesPath.splice(entryIndex, 1);
+		}
+
+		if (!Array.isArray(configCommands.commandEventUnload))
+			configCommands.commandEventUnload = [];
+		if (!configCommands.commandEventUnload.includes(`${fileName}.js`))
+			configCommands.commandEventUnload.push(`${fileName}.js`);
+
+		fs.writeFileSync(global.client.dirConfigCommands, JSON.stringify(configCommands, null, 2));
+
+		return { status: "success", name: eventName };
+	} catch (error) {
+		return { status: "failed", name: fileName, error };
+	}
+}
+
+function loadEvent(fileName, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode) {
+	const GoatBot = global.GoatBot;
+	const dirPath = path.join(EVENTS_DIR, `${fileName}.js`);
+
+	try {
+		if (rawCode) {
+			rawCode = rawCode.replace(/^```(js|javascript)?\n?/, "").replace(/```$/, "");
+			fs.writeFileSync(dirPath, rawCode, "utf-8");
+		}
+
+		if (!fs.existsSync(dirPath))
+			throw new Error(getLang("missingFile", `${fileName}.js`));
+
+		delete require.cache[require.resolve(dirPath)];
+		const eventCommand = require(dirPath);
+		const configCommand = eventCommand.config;
+
+		if (!configCommand || !configCommand.name)
+			throw new Error(getLang("invalidFileName"));
+
+		const eventName = configCommand.name.toLowerCase();
+
+		if (GoatBot.eventCommands.has(eventName))
+			unloadEvent(eventName, configCommands, getLang);
+
+		const { onLoad } = eventCommand;
+		const { envGlobal, envConfig } = configCommand;
+
+		if (envGlobal && typeof envGlobal === "object" && !Array.isArray(envGlobal)) {
+			for (const key in envGlobal)
+				if (!configCommands.envGlobal[key])
+					configCommands.envGlobal[key] = envGlobal[key];
+		}
+
+		if (envConfig && typeof envConfig === "object" && !Array.isArray(envConfig)) {
+			if (!configCommands.envEvents)
+				configCommands.envEvents = {};
+			if (!configCommands.envEvents[eventName])
+				configCommands.envEvents[eventName] = {};
+			for (const [key, value] of Object.entries(envConfig))
+				if (configCommands.envEvents[eventName][key] === undefined)
+					configCommands.envEvents[eventName][key] = value;
+		}
+
+		GoatBot.eventCommands.set(eventName, eventCommand);
+		GoatBot.eventCommandsFilesPath.push({
+			filePath: path.normalize(dirPath),
+			commandName: [eventName]
+		});
+
+		if (Array.isArray(configCommands.commandEventUnload)) {
+			const idx = configCommands.commandEventUnload.indexOf(`${fileName}.js`);
+			if (idx !== -1) configCommands.commandEventUnload.splice(idx, 1);
+		}
+
+		fs.writeFileSync(global.client.dirConfigCommands, JSON.stringify(configCommands, null, 2));
+
+		if (typeof onLoad === "function")
+			onLoad({ api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData });
+
+		return { status: "success", name: eventName, eventCommand };
+	} catch (error) {
+		return { status: "failed", name: fileName, error, errorWithThoutRemoveHomeDir: error };
+	}
 }
 
 module.exports = {
 	config: {
 		name: "event",
-		version: "1.9",
-		author: "NTKhang",
+		version: "3.0",
+		author: "NTKHANKI || modified by nx",
 		countDown: 5,
 		role: 2,
-		description: {
-			vi: "Quản lý các tệp lệnh event của bạn",
-			en: "Manage your event command files"
-		},
+		description: { en: "Manage event command listener modules" },
 		category: "owner",
 		guide: {
-			vi: "{pn} load <tên file lệnh>"
-				+ "\n{pn} loadAll"
-				+ "\n{pn} install <url> <tên file lệnh>: Tải về và load command event, url là đường dẫn tới file lệnh (raw)"
-				+ "\n{pn} install <code> <tên file lệnh>: Tải về và load command event, code là mã của file lệnh (raw)",
-			en: "{pn} load <command file name>"
-				+ "\n{pn} loadAll"
-				+ "\n{pn} install <url> <command file name>: Download and load event command, url is the path to the command file (raw)"
-				+ "\n{pn} install <code> <command file name>: Download and load event command, code is the code of the command file (raw)"
+			en:
+				"   {pn} load <name> → load/reload an event listener\n" +
+				"   {pn} loadAll → sync all active event listeners\n" +
+				"   {pn} unload <name> → disable an event listener\n" +
+				"   {pn} install <url> <fileName.js> → fetch event module from link\n" +
+				"   {pn} install <fileName.js> <code> → compile event module from source code"
 		}
 	},
 
 	langs: {
-		vi: {
-			missingFileName: "⚠ | Vui lòng nhập vào tên lệnh bạn muốn reload",
-			loaded: "✓ | Đã load event command \"%1\" thành công",
-			loadedError: "✗ | Load event command \"%1\" thất bại với lỗi\n%2: %3",
-			loadedSuccess: "✓ | Đã load thành công \"%1\" event command",
-			loadedFail: "✗ | Load thất bại event command \"%1\"\n%2",
-			missingCommandNameUnload: "⚠ | Vui lòng nhập vào tên lệnh bạn muốn unload",
-			unloaded: "✓ | Đã unload event command \"%1\" thành công",
-			unloadedError: "✗ | Unload event command \"%1\" thất bại với lỗi\n%2: %3",
-			missingUrlCodeOrFileName: "⚠ | Vui lòng nhập vào url hoặc code và tên file lệnh bạn muốn cài đặt",
-			missingUrlOrCode: "⚠ | Vui lòng nhập vào url hoặc code của tệp lệnh bạn muốn cài đặt",
-			missingFileNameInstall: "⚠ | Vui lòng nhập vào tên file để lưu lệnh (đuôi .js)",
-			invalidUrlOrCode: "⚠ | Không thể lấy được mã lệnh",
-			alreadExist: "⚠ | File lệnh đã tồn tại, bạn có chắc chắn muốn ghi đè lên file lệnh cũ không?\nThả cảm xúc bất kì vào tin nhắn này để tiếp tục",
-			installed: "✓ | Đã cài đặt event command \"%1\" thành công, file lệnh được lưu tại %2",
-			installedError: "✗ | Cài đặt event command \"%1\" thất bại với lỗi\n%2: %3",
-			missingFile: "⚠ | Không tìm thấy tệp lệnh \"%1\"",
-			invalidFileName: "⚠ | Tên tệp lệnh không hợp lệ",
-			unloadedFile: "✓ | Đã unload lệnh \"%1\""
-		},
 		en: {
-			missingFileName: "⚠ | Please enter the command name you want to reload",
-			loaded: "✓ | Loaded event command \"%1\" successfully",
-			loadedError: "✗ | Loaded event command \"%1\" failed with error\n%2: %3",
-			loadedSuccess: "✓ | Loaded \"%1\" event command successfully",
-			loadedFail: "✗ | Loaded event command \"%1\" failed\n%2",
-			missingCommandNameUnload: "⚠ | Please enter the command name you want to unload",
-			unloaded: "✓ | Unloaded event command \"%1\" successfully",
-			unloadedError: "✗ | Unloaded event command \"%1\" failed with error\n%2: %3",
-			missingUrlCodeOrFileName: "⚠ | Please enter the url or code and command file name you want to install",
-			missingUrlOrCode: "⚠ | Please enter the url or code of the command file you want to install",
-			missingFileNameInstall: "⚠ | Please enter the file name to save the command (with .js extension)",
-			invalidUrlOrCode: "⚠ | Unable to get command code",
-			alreadExist: "⚠ | The command file already exists, are you sure you want to overwrite the old command file?\nReact to this message to continue",
-			installed: "✓ | Installed event command \"%1\" successfully, the command file is saved at %2",
-			installedError: "✗ | Installed event command \"%1\" failed with error\n%2: %3",
-			missingFile: "⚠ | File \"%1\" not found",
-			invalidFileName: "⚠ | Invalid file name",
-			unloadedFile: "✓ | Unloaded command \"%1\""
+			missingFileName: "❌ Target event module name required.",
+			loaded: "⚡ [EVENT SYNCHRONIZED]\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 Listener : %1\nSTATUS   : Active",
+			loadedError: "⚠️ [SYNC FAILED]\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 Listener : %1\n🛑 Reason   : %2\n📌 Info     : %3",
+			loadedSuccess: "⚡ [EVENT BATCH EXECUTION]\n━━━━━━━━━━━━━━━━━━━━━━\n✅ Successfully reloaded %1 listener(s).",
+			loadedFail: "⚠️ [SYNC WARNING]\n━━━━━━━━━━━━━━━━━━━━━━\n❌ Failed to sync %1 listener(s):\n%2",
+			missingCommandNameUnload: "❌ Target event module name required to unload.",
+			unloaded: "🛑 [EVENT DEACTIVATED]\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 Listener : %1\nSTATUS   : Disabled",
+			unloadedError: "⚠️ [DEACTIVATION FAILED]\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 Listener : %1\n🛑 Reason   : %2 - %3",
+			missingUrlCodeOrFileName: "❌ Valid URL or source snippet with file name required.",
+			missingFileNameInstall: "❌ Extension format must end with '.js'",
+			invalidUrl: "❌ Target endpoint URL is invalid.",
+			invalidUrlOrCode: "❌ Target source content empty.",
+			alreadExist: "🌐 [DUPLICATE LISTENER DETECTED]\n━━━━━━━━━━━━━━━━━━━━━━\n⚠️ Event module already exists in /events folder.\n💬 React to this message to overwrite.",
+			installed: "🚀 [EVENT INSTALLED]\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 Listener : %1\n📂 Path     : %2\nSTATUS   : Active",
+			installedError: "⚠️ [INSTALLATION FAILED]\n━━━━━━━━━━━━━━━━━━━━━━\n🎯 Listener : %1\n🛑 Reason   : %2\n📌 Info     : %3",
+			missingFile: "❌ Event file '%1' not found in system.",
+			invalidFileName: "❌ Invalid module - missing config.name property."
 		}
 	},
 
 	onStart: async ({ args, message, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, commandName, event, getLang }) => {
 		const { configCommands } = global.GoatBot;
-		const { log, loadScripts } = global.utils;
 
 		if (args[0] == "load" && args.length == 2) {
 			if (!args[1])
 				return message.reply(getLang("missingFileName"));
-			const infoLoad = loadScripts("events", args[1], log, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang);
+			const infoLoad = loadEvent(args[1], configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang);
 			infoLoad.status == "success" ?
 				message.reply(getLang("loaded", infoLoad.name)) :
-				message.reply(getLang("loadedError", infoLoad.name, infoLoad.error, infoLoad.message));
+				message.reply(getLang("loadedError", infoLoad.name, infoLoad.error.name, infoLoad.error.message));
 		}
 		else if ((args[0] || "").toLowerCase() == "loadall" || (args[0] == "load" && args.length > 2)) {
 			const allFile = args[0].toLowerCase() == "loadall" ?
-				fs.readdirSync(path.join(__dirname, "..", "events"))
+				fs.readdirSync(EVENTS_DIR)
 					.filter(file =>
 						file.endsWith(".js") &&
 						!file.match(/(eg)\.js$/g) &&
 						(process.env.NODE_ENV == "development" ? true : !file.match(/(dev)\.js$/g)) &&
 						!configCommands.commandEventUnload?.includes(file)
 					)
-					.map(item => item = item.split(".")[0]) :
+					.map(item => item.split(".")[0]) :
 				args.slice(1);
+
 			const arraySucces = [];
 			const arrayFail = [];
 			for (const fileName of allFile) {
-				const infoLoad = loadScripts("events", fileName, log, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang);
+				const infoLoad = loadEvent(fileName, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang);
 				infoLoad.status == "success" ?
 					arraySucces.push(fileName) :
-					arrayFail.push(`${fileName} => ${infoLoad.error.name}: ${infoLoad.error.message}`);
+					arrayFail.push(` • ${fileName} ➔ ${infoLoad.error.name}: ${infoLoad.error.message}`);
 			}
 			let msg = "";
 			if (arraySucces.length > 0)
 				msg += getLang("loadedSuccess", arraySucces.length) + '\n';
 			if (arrayFail.length > 0)
-				msg += (msg ? '\n' : '') + getLang("loadedFail", arrayFail.length, "!" + arrayFail.join("\n! "));
-			message.reply(msg);
+				msg += (msg ? '\n' : '') + getLang("loadedFail", arrayFail.length, arrayFail.join("\n"));
+			message.reply(msg || "No event changes detected.");
 		}
 		else if (args[0] == "unload") {
 			if (!args[1])
 				return message.reply(getLang("missingCommandNameUnload"));
-			const infoUnload = global.utils.unloadScripts("events", args[1], configCommands, getLang);
+			const infoUnload = unloadEvent(args[1], configCommands, getLang);
 			infoUnload.status == "success" ?
 				message.reply(getLang("unloaded", infoUnload.name)) :
 				message.reply(getLang("unloadedError", infoUnload.name, infoUnload.error.name, infoUnload.error.message));
@@ -130,13 +209,10 @@ module.exports = {
 			if (!url || !fileName)
 				return message.reply(getLang("missingUrlCodeOrFileName"));
 
-			if (url.endsWith(".js")) {
-				const tmp = fileName;
-				fileName = url;
-				url = tmp;
-			}
+			if (url.endsWith(".js") && !isURL(url))
+				[url, fileName] = [fileName, url];
 
-			if (url.match(/(https?:\/\/(?:www\.|(?!www)))/)) {
+			if (/^https?:\/\//.test(url)) {
 				if (!fileName || !fileName.endsWith(".js"))
 					return message.reply(getLang("missingFileNameInstall"));
 
@@ -145,16 +221,11 @@ module.exports = {
 					return message.reply(getLang("invalidUrl"));
 
 				if (domain == "pastebin.com") {
-					const regex = /https:\/\/pastebin\.com\/(?!raw\/)(.*)/;
-					if (url.match(regex))
-						url = url.replace(regex, "https://pastebin.com/raw/$1");
-					if (url.endsWith("/"))
-						url = url.slice(0, -1);
+					url = url.replace(/https:\/\/pastebin\.com\/(?!raw\/)(.*)/, "https://pastebin.com/raw/$1");
+					if (url.endsWith("/")) url = url.slice(0, -1);
 				}
 				else if (domain == "github.com") {
-					const regex = /https:\/\/github\.com\/(.*)\/blob\/(.*)/;
-					if (url.match(regex))
-						url = url.replace(regex, "https://raw.githubusercontent.com/$1/$2");
+					url = url.replace(/https:\/\/github\.com\/(.*)\/blob\/(.*)/, "https://raw.githubusercontent.com/$1/$2");
 				}
 
 				rawCode = (await axios.get(url)).data;
@@ -165,8 +236,9 @@ module.exports = {
 				}
 			}
 			else {
-				if (args[args.length - 1].endsWith(".js")) {
-					fileName = args[args.length - 1];
+				const lastArg = args[args.length - 1];
+				if (lastArg.endsWith(".js")) {
+					fileName = lastArg;
 					rawCode = event.body.slice(event.body.indexOf('install') + 7, event.body.indexOf(fileName) - 1);
 				}
 				else if (args[1].endsWith(".js")) {
@@ -176,25 +248,24 @@ module.exports = {
 				else
 					return message.reply(getLang("missingFileNameInstall"));
 			}
+
 			if (!rawCode)
 				return message.reply(getLang("invalidUrlOrCode"));
-			if (fs.existsSync(path.join(__dirname, "..", "events", fileName)))
+
+			if (fs.existsSync(path.join(EVENTS_DIR, fileName)))
 				return message.reply(getLang("alreadExist"), (err, info) => {
 					global.GoatBot.onReaction.set(info.messageID, {
 						commandName,
 						messageID: info.messageID,
 						type: "install",
 						author: event.senderID,
-						data: {
-							fileName,
-							rawCode
-						}
+						data: { fileName, rawCode }
 					});
 				});
 			else {
-				const infoLoad = loadScripts("events", fileName, log, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode);
+				const infoLoad = loadEvent(fileName.replace(".js", ""), configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode);
 				infoLoad.status == "success" ?
-					message.reply(getLang("installed", infoLoad.name, path.join(__dirname, fileName).replace(process.cwd(), ""))) :
+					message.reply(getLang("installed", infoLoad.name, path.join(EVENTS_DIR, fileName).replace(process.cwd(), ""))) :
 					message.reply(getLang("installedError", infoLoad.name, infoLoad.error.name, infoLoad.error.message));
 			}
 		}
@@ -207,10 +278,9 @@ module.exports = {
 		if (event.userID != author)
 			return;
 		const { configCommands } = global.GoatBot;
-		const { log, loadScripts } = global.utils;
-		const infoLoad = loadScripts("cmds", fileName, log, configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode);
+		const infoLoad = loadEvent(fileName.replace(".js", ""), configCommands, api, threadModel, userModel, dashBoardModel, globalModel, threadsData, usersData, dashBoardData, globalData, getLang, rawCode);
 		infoLoad.status == "success" ?
-			message.reply(getLang("installed", infoLoad.name, path.join(__dirname, '..', 'events', fileName).replace(process.cwd(), ""), () => message.unsend(messageID))) :
+			message.reply(getLang("installed", infoLoad.name, path.join(EVENTS_DIR, fileName).replace(process.cwd(), ""), () => message.unsend(messageID))) :
 			message.reply(getLang("installedError", infoLoad.name, infoLoad.error.name, infoLoad.error.message, () => message.unsend(messageID)));
 	}
 };
