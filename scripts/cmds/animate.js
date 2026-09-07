@@ -11,7 +11,7 @@ module.exports = {
     role: 0,
     shortDescription: "Animate an image using Wan-Video AI",
     longDescription: "Reply to an image with a prompt to generate an animated video",
-    category: "AI & MEDIA",
+    category: "AI & IMAGE GENERATION",
     guide: "{pn} <prompt>\nExample: /animate cinematic motion\nReply to an image to animate it."
   },
 
