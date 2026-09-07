@@ -12,7 +12,7 @@ module.exports = {
 			vi: "Chỉnh sửa nội dung/bật/tắt tin nhắn tạm biệt thành viên rời khỏi nhóm chat của bạn",
 			en: "Edit content/turn on/off leave message when member leave your group chat"
 		},
-		category: "custom",
+		category: "box chat",
 		guide: {
 			vi: {
 				body: "   {pn} on: Bật tin nhắn tạm biệt"
