@@ -9,7 +9,7 @@ module.exports = {
     countDown: 5,
     role: 0,
     shortDescription: "Get random memes or check total count",
-    category: "fun",
+    category: "FUN & SOCIAL",
     guide: "{pn} or {pn} list"
   },
 
