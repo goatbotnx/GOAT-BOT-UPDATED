@@ -1,7 +1,7 @@
 /**
- * @author NTKhang
+ * @author NTKhang (original), maintained by xalman
  * ! The source code is written by NTKhang, please don't change the author's name everywhere. Thank you for using
- * ! Official source code: https://github.com/ntkhang03/Goat-Bot-V2
+ * ! Official source code: https://github.com/goatbotnx/GOAT-BOT-UPDATED
  * ! If you do not download the source code from the above address, you are using an unknown version and at risk of having your account hacked
  */
 
@@ -233,7 +233,7 @@ if (config.autoRestart) {
 	global.utils.sendMail = sendMail;
 	global.utils.transporter = transporter;
 
-	const { data: { version } } = await axios.get("https://raw.githubusercontent.com/ntkhang03/Goat-Bot-V2/main/package.json");
+	const { data: { version } } = await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json");
 	const currentVersion = require("./package.json").version;
 	if (compareVersion(version, currentVersion) === 1)
 		utils.log.master("NEW VERSION", getText(
