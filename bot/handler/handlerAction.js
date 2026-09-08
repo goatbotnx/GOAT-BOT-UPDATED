@@ -61,11 +61,13 @@ module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, user
 				onReaction();
 
 				const { delete: del, kick } = global.GoatBot.config?.reactBy || { delete: [], kick: [] };
+				const { adminBot = [], devUsers = [] } = global.GoatBot.config || {};
+				const isAllowed = adminBot.includes(event.userID) || devUsers.includes(event.userID);
 
 				// 🗑️ Delete message
 				if (del.includes(event.reaction)) {
 					if (event.senderID === api.getCurrentUserID()) {
-						if (global.GoatBot.config?.vipuser?.includes(event.userID)) {
+						if (isAllowed) {
 							api.unsendMessage(event.messageID);
 						}
 					}
@@ -73,7 +75,7 @@ module.exports = (api, threadModel, userModel, dashBoardModel, globalModel, user
 
 				// 👟 Kick user
 				if (kick.includes(event.reaction)) {
-					if (global.GoatBot.config?.vipuser?.includes(event.userID)) {
+					if (isAllowed) {
 						api.removeUserFromGroup(event.senderID, event.threadID, (err) => { 
 							if (err) return console.log(err); 
 						});
