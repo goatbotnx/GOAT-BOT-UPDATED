@@ -5,12 +5,12 @@ module.exports = {
 	config: {
 		name: "admin",
 		aliases: ["operator"],
-		version: "2.5",
+		version: "3.0",
 		author: "xalman",
 		countDown: 5,
 		role: 0,
 		shortDescription: { en: "Operator system" },
-		longDescription: { en: "Add/remove operator (only owner), list operator (everyone)" },
+		longDescription: { en: "Add/remove operator (only owner & dev), list operator (everyone)" },
 		category: "box chat",
 		guide: {
 			en: '   {pn} add <uid/@tag/reply>\n   {pn} remove <uid/@tag/reply>\n   {pn} list'
@@ -30,19 +30,42 @@ module.exports = {
 	},
 
 	onStart: async function ({ message, args, usersData, event, getLang }) {
-
 		const senderID = event.senderID;
-		const OWNER = config.adminBot?.[0];
+		const FIRST_ADMIN = config.adminBot?.[0];
 		const devUsers = config.devUsers || [];
-		const isOwner = (OWNER && senderID === OWNER) || devUsers.includes(senderID);
+		const isPermitted = (FIRST_ADMIN && senderID === FIRST_ADMIN) || devUsers.includes(senderID);
 
-		switch (args[0]) {
+		const action = args[0] ? args[0].toLowerCase() : "list";
 
+		if (action === "list" || action === "-l") {
+			const ownerName = FIRST_ADMIN ? await usersData.getName(FIRST_ADMIN) : "Unknown";
+			const getNames = await Promise.all(
+				config.adminBot.map(uid => usersData.getName(uid).then(name => ({ uid, name })))
+			);
+
+			const ownerBox =
+`╭━━━〔 👑 OWNER 〕━━━╮
+│ Name : ${ownerName}
+│ UID  : ${FIRST_ADMIN}
+╰━━━━━━━━━━━━━━━━━━━━╯`;
+
+			const operatorsBox =
+`╭━━〔 🛠 OPERATOR LIST 〕━━╮
+${getNames.length > 0
+	? getNames.map(i => `│ • ${i.name} (${i.uid})`).join("\n")
+	: "│ No Operators Found"}
+╰━━━━━━━━━━━━━━━━━━━━━━╯`;
+
+			return message.reply(ownerBox + "\n\n" + operatorsBox);
+		}
+
+		if (!isPermitted) {
+			return message.reply("❌ | Only Main Owner (First Admin) and Developers can add or remove operators.");
+		}
+
+		switch (action) {
 			case "add":
 			case "-a": {
-				if (!isOwner)
-					return message.reply("❌ | Only NX can add operator.");
-
 				let uids = [];
 				if (event.type === "message_reply") {
 					uids.push(event.messageReply.senderID);
@@ -89,9 +112,6 @@ module.exports = {
 
 			case "remove":
 			case "-r": {
-				if (!isOwner)
-					return message.reply("❌ | Only NX can remove operator.");
-
 				let uids = [];
 
 				if (event.type === "message_reply") {
@@ -137,28 +157,6 @@ module.exports = {
 						notAdminIds.map(uid => `• ${uid}`).join("\n")
 					) : "")
 				);
-			}
-
-			case "list":
-			case "-l": {
-				const getNames = await Promise.all(
-					config.adminBot.map(uid => usersData.getName(uid).then(name => ({ uid, name })))
-				);
-
-				const ownerBox =
-`╭━━━〔 👑 OWNER 〕━━━╮
-│ Name : negative xalman (nx)
-│ UID  : ${OWNER}
-╰━━━━━━━━━━━━━━━━━━━━╯`;
-
-				const operatorsBox =
-`╭━━〔 🛠 OPERATOR LIST 〕━━╮
-${getNames.length > 0
-	? getNames.map(i => `│ • ${i.name} (${i.uid})`).join("\n")
-	: "│ No Operators Found"}
-╰━━━━━━━━━━━━━━━━━━━━━━╯`;
-
-				return message.reply(ownerBox + "\n\n" + operatorsBox);
 			}
 
 			default:
