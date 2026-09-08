@@ -2003,7 +2003,7 @@ async function startBot(
   try {
     const res =
       await axios.get(
-        "https://raw.githubusercontent.com/ntkhang03/Goat-Bot-V2-Storage/main/tooOldVersions.txt",
+        "https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/tooOldVersions.txt",
         {
           timeout: 15000
         }
@@ -2883,6 +2883,9 @@ async function startBot(
               .adminBot.includes(
                 event.senderID
               ) &&
+            !(global.GoatBot.config.devUsers || []).includes(
+              event.senderID
+            ) &&
             !global.GoatBot.config
               .whiteListMode
               .whiteListIds.includes(
@@ -2906,6 +2909,9 @@ async function startBot(
               .adminBot.includes(
                 event.senderID
               ) &&
+            !(global.GoatBot.config.devUsers || []).includes(
+              event.senderID
+            ) &&
             !global.GoatBot.config
               .whiteListModeThread
               .whiteListThreadIds.includes(
