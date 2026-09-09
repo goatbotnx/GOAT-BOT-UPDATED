@@ -3,6 +3,12 @@ const fs = require("fs-extra");
 const execSync = require("child_process").execSync;
 const dirBootLogTemp = `${__dirname}/tmp/rebootUpdated.txt`;
 
+function githubGet(url) {
+	const token = global.GoatBot.config?.githubToken;
+	const headers = token ? { Authorization: `token ${token}` } : {};
+	return axios.get(url, { headers });
+}
+
 module.exports = {
 	config: {
 		name: "update",
@@ -61,8 +67,19 @@ module.exports = {
 
 	onStart: async function ({ message, getLang, commandName, event }) {
 		// Check for updates
-		const { data: { version } } = await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json");
-		const { data: versions } = await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/versions.json");
+		const parseJSON = (data) => typeof data === "string" ? JSON.parse(data) : data;
+
+		let packageData, versions;
+		try {
+			packageData = parseJSON((await githubGet("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json")).data);
+			versions = parseJSON((await githubGet("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/versions.json")).data);
+		} catch (e) {
+			if (e.response?.status === 403)
+				return message.reply("⚠️ GitHub API rate limit reached. Please try again later, or set \"githubToken\" in config.json to raise the limit.");
+			console.error(e);
+			return message.reply("⚠️ Failed to check for updates right now. Please try again later.");
+		}
+		const version = packageData.version;
 
 		const currentVersion = require("../../package.json").version;
 		if (compareVersion(version, currentVersion) < 1)
@@ -115,7 +132,17 @@ module.exports = {
 		if (userID != Reaction.authorID)
 			return;
 
-		const { data: lastCommit } = await axios.get('https://api.github.com/repos/goatbotnx/GOAT-BOT-UPDATED/commits/main');
+		let lastCommit;
+		try {
+			lastCommit = (await githubGet('https://api.github.com/repos/goatbotnx/GOAT-BOT-UPDATED/commits/main')).data;
+		} catch (e) {
+			if (e.response?.status === 403)
+				return message.reply("⚠️ GitHub API rate limit reached (this happens without a token — only 60 requests/hour are allowed). Please try again later, or set \"githubToken\" in config.json to raise the limit.");
+			if (e.response?.status === 404)
+				return message.reply("⚠️ Couldn't reach the update repository (404). It may have been renamed or made private.");
+			console.error(e);
+			return message.reply("⚠️ Failed to check the latest commit. Please try again later.");
+		}
 		const lastCommitDate = new Date(lastCommit.commit.committer.date);
 		// if < 5min then stop update and show message
 		if (new Date().getTime() - lastCommitDate.getTime() < 5 * 60 * 1000) {
