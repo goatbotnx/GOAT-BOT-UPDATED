@@ -131,7 +131,8 @@ fs.copyFileSync = function (src, dest) {
 		return log.error("ERROR", getText("updater", "updateTooFast", minutes, seconds));
 	}
 
-	const { data: versions } = await axios.get('https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/versions.json');
+	const rawVersions = (await axios.get('https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/versions.json')).data;
+	const versions = typeof rawVersions === "string" ? JSON.parse(rawVersions) : rawVersions;
 	const currentVersion = require('./package.json').version;
 	const indexCurrentVersion = versions.findIndex(v => v.version === currentVersion);
 	if (indexCurrentVersion === -1)
@@ -272,7 +273,8 @@ fs.copyFileSync = function (src, dest) {
 		}
 	}
 
-	const { data: packageJSON } = await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json");
+	const rawPackageJSON = (await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json")).data;
+	const packageJSON = typeof rawPackageJSON === "string" ? JSON.parse(rawPackageJSON) : rawPackageJSON;
 
 	fs.writeFileSync(`${process.cwd()}/package.json`, JSON.stringify(packageJSON, null, 2));
 	log.info("UPDATE", getText("updater", "updateSuccess", !reinstallDependencies ? getText("updater", "restartToApply") : ""));
