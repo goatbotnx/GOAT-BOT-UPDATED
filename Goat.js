@@ -233,16 +233,21 @@ if (config.autoRestart) {
 	global.utils.sendMail = sendMail;
 	global.utils.transporter = transporter;
 
-	const { data: { version } } = await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json");
-	const currentVersion = require("./package.json").version;
-	if (compareVersion(version, currentVersion) === 1)
-		utils.log.master("NEW VERSION", getText(
-			"Goat",
-			"newVersionDetected",
-			colors.gray(currentVersion),
+	try {
+		const rawData = (await axios.get("https://raw.githubusercontent.com/goatbotnx/GOAT-BOT-UPDATED/main/package.json")).data;
+		const { version } = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+		const currentVersion = require("./package.json").version;
+		if (compareVersion(version, currentVersion) === 1)
+			utils.log.master("NEW VERSION", getText(
+				"Goat",
+				"newVersionDetected",
+				colors.gray(currentVersion),
 			colors.hex("#eb6a07", version),
 			colors.hex("#eb6a07", "node update")
 		));
+	} catch (e) {
+		utils.log.err("Goat", "Failed to check for new version", e);
+	}
 
 	const parentIdGoogleDrive = await utils.drive.checkAndCreateParentFolder("GoatBot");
 	utils.drive.parentID = parentIdGoogleDrive;
