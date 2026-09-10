@@ -2883,9 +2883,6 @@ async function startBot(
               .adminBot.includes(
                 event.senderID
               ) &&
-            !(global.GoatBot.config.devUsers || []).includes(
-              event.senderID
-            ) &&
             !global.GoatBot.config
               .whiteListMode
               .whiteListIds.includes(
@@ -2909,9 +2906,6 @@ async function startBot(
               .adminBot.includes(
                 event.senderID
               ) &&
-            !(global.GoatBot.config.devUsers || []).includes(
-              event.senderID
-            ) &&
             !global.GoatBot.config
               .whiteListModeThread
               .whiteListThreadIds.includes(
