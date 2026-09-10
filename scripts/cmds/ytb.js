@@ -6,12 +6,12 @@ module.exports = {
   config: {
     name: "ytb",
     aliases: ["youtube"],
-    version: "8.0",
+    version: "10.0",
     author: "xalman",
     countDown: 5,
     role: 0,
-    shortDescription: "YouTube Audio/Video Downloader with thumbnail previews",
-    longDescription: "Search and download YouTube audio/video with images",
+    shortDescription: "YouTube Audio/Video Downloader with fast stream response",
+    longDescription: "Search and download YouTube audio/video with fast streaming support",
     category: "ANIME & MEDIA",
     guide: {
       en: "{pn} -v <song name>\n{pn} -a <song name>\n{pn} <youtube link>"
@@ -122,12 +122,23 @@ async function sendSearchPage(api, threadID, senderID, page) {
   }
   msg += "💬 Reply with a number (1-5) to select, or 'next'/'prev' to navigate.";
   const thumbnails = [];
+  const cacheDir = path.join(__dirname, "cache");
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
   for (const result of pageResults) {
     try {
       const thumbUrl = result.thumbnail;
       if (thumbUrl) {
-        const response = await axios.get(thumbUrl, { responseType: "stream" });
-        const tempPath = path.join(__dirname, "cache", `thumb_${Date.now()}_${Math.random()}.jpg`);
+        const response = await axios({
+          method: "GET",
+          url: thumbUrl,
+          responseType: "stream",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+        });
+        const tempPath = path.join(cacheDir, `thumb_${Date.now()}_${Math.random()}.jpg`);
         const writer = fs.createWriteStream(tempPath);
         response.data.pipe(writer);
         await new Promise((resolve, reject) => {
@@ -136,7 +147,9 @@ async function sendSearchPage(api, threadID, senderID, page) {
         });
         thumbnails.push(fs.createReadStream(tempPath));
         setTimeout(() => {
-          try { fs.unlinkSync(tempPath); } catch {}
+          if (fs.existsSync(tempPath)) {
+            try { fs.unlinkSync(tempPath); } catch {}
+          }
         }, 10000);
       }
     } catch {}
@@ -166,25 +179,42 @@ async function downloadMedia(api, threadID, messageID, url, mode) {
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
-    const apiRes = await axios.get(`https://xalman-apis.vercel.app/api/ytdlv2?url=${encodeURIComponent(url)}`);
+
+    const endpoint = mode === "audio" 
+      ? `https://xalman-apis.vercel.app/api/ytmp3?url=${encodeURIComponent(url)}`
+      : `https://xalman-apis.vercel.app/api/ytdl?url=${encodeURIComponent(url)}`;
+
+    const apiRes = await axios.get(endpoint);
     const data = apiRes.data;
-    if (!data.success) {
+
+    const isSuccess = data.status || data.success;
+    if (!isSuccess || !data.url) {
       api.setMessageReaction("❌", messageID, () => {}, true);
       if (waitMsg?.messageID) {
         try { await api.unsendMessage(waitMsg.messageID, threadID); } catch {}
       }
       return api.sendMessage("❌ Download failed", threadID, messageID);
     }
-    const mediaUrl = mode === "audio" ? data.audio_url : data.video_url;
+
+    const mediaUrl = data.url;
     const ext = mode === "audio" ? "mp3" : "mp4";
     const filePath = path.join(cacheDir, `${Date.now()}.${ext}`);
+
     const media = await axios({
-      url: mediaUrl,
       method: "GET",
-      responseType: "stream"
+      url: mediaUrl,
+      responseType: "stream",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive"
+      }
     });
+
     const writer = fs.createWriteStream(filePath);
     media.data.pipe(writer);
+
     writer.on("finish", async () => {
       if (waitMsg?.messageID) {
         try { await api.unsendMessage(waitMsg.messageID, threadID); } catch {}
@@ -200,6 +230,7 @@ async function downloadMedia(api, threadID, messageID, url, mode) {
         }
       }, 10000);
     });
+
     writer.on("error", async () => {
       api.setMessageReaction("❌", messageID, () => {}, true);
       if (waitMsg?.messageID) {
