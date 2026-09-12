@@ -6,214 +6,631 @@ const axios = require("axios");
 module.exports = {
   config: {
     name: "top",
-    version: "6.0",
+    version: "7.0",
     author: "xalman",
     role: 0,
-    shortDescription: { en: "Top Richest Leaderboard" },
-    longDescription: { en: "Display top richest users with screenshot design." },
+    shortDescription: {
+      en: "Top Richest Leaderboard"
+    },
+    longDescription: {
+      en: "Display the richest users with profile pictures and stylish leaderboard design."
+    },
     category: "RANK",
-    guide: { en: "{pn}" }
+    guide: {
+      en: "{pn}"
+    }
   },
 
   onStart: async function ({ api, event, usersData, message }) {
-    const allUsers = await usersData.getAll();
-    const topUsers = allUsers
-      .sort((a, b) => (b.money || 0) - (a.money || 0))
-      .slice(0, 17);
+    const ACCESS_TOKEN = "350685531728|62f8ce9f74b12f84c123cc23437a4a32";
 
-    const width = 800;
-    const height = 1800;
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
+    try {
+      const allUsers = await usersData.getAll();
 
-    function drawRoundedRect(x, y, w, h, r, fillColor) {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
-      if (fillColor) {
-        ctx.fillStyle = fillColor;
-        ctx.fill();
+      const validUsers = allUsers
+        .filter(user => {
+          try {
+            return BigInt(String(user.money || 0)) > 0;
+          } catch {
+            return false;
+          }
+        })
+        .sort((a, b) => {
+          try {
+            const A = BigInt(String(a.money || 0));
+            const B = BigInt(String(b.money || 0));
+            return B > A ? 1 : B < A ? -1 : 0;
+          } catch {
+            return 0;
+          }
+        });
+
+      const topUsers = validUsers.slice(0, 17);
+
+      if (!topUsers.length) {
+        return message.reply("❌ No balance data found.");
       }
-    }
 
-    function formatNumber(num) {
-      if (!num || isNaN(num)) return "0";
-      const units = [
-        { v: 1e18, s: "Qi" },
-        { v: 1e15, s: "Qa" },
-        { v: 1e12, s: "T" },
-        { v: 1e9,  s: "B" },
-        { v: 1e6,  s: "M" },
-        { v: 1e3,  s: "K" }
-      ];
-      for (const u of units) {
-        if (num >= u.v) {
-          return (num / u.v).toFixed(2).replace(/\.00$/, "") + u.s;
+      const width = 800;
+      const height = 1800;
+
+      const canvas = createCanvas(width, height);
+      const ctx = canvas.getContext("2d");
+
+      function roundedRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      }
+
+      function formatMoney(value) {
+        try {
+          let num = BigInt(String(value || 0));
+
+          if (num < 1000n) {
+            return num.toString();
+          }
+
+          const units = [
+            { value: 10n ** 63n, name: "Vigintillion" },
+            { value: 10n ** 60n, name: "Novemdecillion" },
+            { value: 10n ** 57n, name: "Octodecillion" },
+            { value: 10n ** 54n, name: "Septendecillion" },
+            { value: 10n ** 51n, name: "Sexdecillion" },
+            { value: 10n ** 48n, name: "Quindecillion" },
+            { value: 10n ** 45n, name: "Quattuordecillion" },
+            { value: 10n ** 42n, name: "Tredecillion" },
+            { value: 10n ** 39n, name: "Duodecillion" },
+            { value: 10n ** 36n, name: "Undecillion" },
+            { value: 10n ** 33n, name: "Decillion" },
+            { value: 10n ** 30n, name: "Nonillion" },
+            { value: 10n ** 27n, name: "Octillion" },
+            { value: 10n ** 24n, name: "Septillion" },
+            { value: 10n ** 21n, name: "Sextillion" },
+            { value: 10n ** 18n, name: "Quintillion" },
+            { value: 10n ** 15n, name: "Quadrillion" },
+            { value: 10n ** 12n, name: "Trillion" },
+            { value: 10n ** 9n, name: "Billion" },
+            { value: 10n ** 6n, name: "Million" },
+            { value: 10n ** 3n, name: "Thousand" }
+          ];
+
+          for (const unit of units) {
+            if (num >= unit.value) {
+              const integerPart = num / unit.value;
+              const remainder = num % unit.value;
+
+              let decimal = "";
+
+              if (remainder > 0n) {
+                const scaled = (remainder * 100n) / unit.value;
+                if (scaled > 0n) {
+                  decimal = "." + scaled.toString().padStart(2, "0");
+                }
+              }
+
+              return integerPart.toString() + decimal + " " + unit.name;
+            }
+          }
+
+          return num.toString();
+        } catch {
+          return "0";
         }
       }
-      return num.toString();
-    }
 
-    ctx.fillStyle = "#030617";
-    ctx.fillRect(0, 0, width, height);
+      function formatShortMoney(value) {
+        try {
+          const num = BigInt(String(value || 0));
 
-    const bgGlow = ctx.createRadialGradient(width / 2, 250, 50, width / 2, 250, 400);
-    bgGlow.addColorStop(0, "rgba(255, 215, 0, 0.15)");
-    bgGlow.addColorStop(1, "rgba(3, 6, 23, 0)");
-    ctx.fillStyle = bgGlow;
-    ctx.fillRect(0, 0, width, 600);
+          const units = [
+            { value: 10n ** 63n, name: "Vg" },
+            { value: 10n ** 60n, name: "Nov" },
+            { value: 10n ** 57n, name: "Oct" },
+            { value: 10n ** 54n, name: "Sep" },
+            { value: 10n ** 51n, name: "Sex" },
+            { value: 10n ** 48n, name: "Qn" },
+            { value: 10n ** 45n, name: "Qd" },
+            { value: 10n ** 42n, name: "Td" },
+            { value: 10n ** 39n, name: "Dd" },
+            { value: 10n ** 36n, name: "Ud" },
+            { value: 10n ** 33n, name: "Dc" },
+            { value: 10n ** 30n, name: "No" },
+            { value: 10n ** 27n, name: "Oc" },
+            { value: 10n ** 24n, name: "Sp" },
+            { value: 10n ** 21n, name: "Sx" },
+            { value: 10n ** 18n, name: "Qi" },
+            { value: 10n ** 15n, name: "Qa" },
+            { value: 10n ** 12n, name: "T" },
+            { value: 10n ** 9n, name: "B" },
+            { value: 10n ** 6n, name: "M" },
+            { value: 10n ** 3n, name: "K" }
+          ];
 
-    ctx.textAlign = "center";
-    ctx.font = "bold 42px Arial";
-    ctx.fillStyle = "#FFD700";
-    ctx.shadowColor = "rgba(255, 215, 0, 0.6)";
-    ctx.shadowBlur = 15;
-    ctx.fillText("TOP BALANCE LEADERBOARD", width / 2, 80);
-    ctx.shadowBlur = 0;
+          for (const unit of units) {
+            if (num >= unit.value) {
+              const integerPart = num / unit.value;
+              const remainder = num % unit.value;
+              const decimal = (remainder * 100n / unit.value)
+                .toString()
+                .padStart(2, "0");
 
-    const avatarCache = {};
-    const token = "6628568379|c1e620fa708a1d5696fb991c1bde5662";
-    for (let i = 0; i < topUsers.length; i++) {
-      const user = topUsers[i];
-      try {
-        const url = `https://graph.facebook.com/${user.userID}/picture?width=200&height=200&access_token=${token}`;
-        const response = await axios.get(url, { responseType: "arraybuffer" });
-        const img = await loadImage(response.data);
-        avatarCache[user.userID] = img;
-      } catch {}
-    }
+              return integerPart.toString() + "." + decimal + unit.name;
+            }
+          }
 
-    const top3Pos = [
-      { rank: "#1", x: width / 2, y: 220, r: 85, color: "#FFD700", idx: 0 },
-      { rank: "#2", x: 200, y: 240, r: 65, color: "#C0C0C0", idx: 1 },
-      { rank: "#3", x: 600, y: 240, r: 65, color: "#E5A066", idx: 2 }
-    ];
-
-    for (const pos of top3Pos) {
-      const u = topUsers[pos.idx];
-      if (!u) continue;
-
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, pos.r + 6, 0, Math.PI * 2);
-      ctx.strokeStyle = pos.color;
-      ctx.lineWidth = 4;
-      ctx.shadowColor = pos.color;
-      ctx.shadowBlur = 15;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, pos.r, 0, Math.PI * 2);
-      ctx.clip();
-      if (avatarCache[u.userID]) {
-        ctx.drawImage(avatarCache[u.userID], pos.x - pos.r, pos.y - pos.r, pos.r * 2, pos.r * 2);
-      } else {
-        ctx.fillStyle = "#1e293b";
-        ctx.fillRect(pos.x - pos.r, pos.y - pos.r, pos.r * 2, pos.r * 2);
+          return num.toString();
+        } catch {
+          return "0";
+        }
       }
-      ctx.restore();
 
-      ctx.beginPath();
-      ctx.arc(pos.x + pos.r * 0.7, pos.y - pos.r * 0.7, 18, 0, Math.PI * 2);
-      ctx.fillStyle = pos.color;
-      ctx.fill();
-      ctx.font = "bold 14px Arial";
-      ctx.fillStyle = "#000";
+      function truncate(text, max) {
+        text = String(text || "User");
+        return text.length > max
+          ? text.substring(0, max - 3) + "..."
+          : text;
+      }
+
+      function drawAvatar(img, x, y, radius, borderColor) {
+        ctx.save();
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius + 7, 0, Math.PI * 2);
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = borderColor;
+        ctx.shadowBlur = 15;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.clip();
+
+        if (img) {
+          ctx.drawImage(
+            img,
+            x - radius,
+            y - radius,
+            radius * 2,
+            radius * 2
+          );
+        } else {
+          ctx.fillStyle = "#172033";
+          ctx.fillRect(
+            x - radius,
+            y - radius,
+            radius * 2,
+            radius * 2
+          );
+
+          ctx.fillStyle = "#64748b";
+          ctx.font = `bold ${radius}px Arial`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("?", x, y);
+        }
+
+        ctx.restore();
+      }
+
+      ctx.fillStyle = "#02040d";
+      ctx.fillRect(0, 0, width, height);
+
+      const bg = ctx.createLinearGradient(0, 0, width, height);
+      bg.addColorStop(0, "#020617");
+      bg.addColorStop(0.45, "#07152e");
+      bg.addColorStop(1, "#030617");
+
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height);
+
+      for (let i = 0; i < 18; i++) {
+        const glow = ctx.createRadialGradient(
+          Math.random() * width,
+          Math.random() * height,
+          5,
+          Math.random() * width,
+          Math.random() * height,
+          180
+        );
+
+        glow.addColorStop(0, "rgba(0,210,255,0.08)");
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      ctx.strokeStyle = "rgba(0,210,255,0.08)";
+      ctx.lineWidth = 1;
+
+      for (let x = 0; x < width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+
+      for (let y = 0; y < height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(pos.rank, pos.x + pos.r * 0.7, pos.y - pos.r * 0.7);
-
-      ctx.textBaseline = "alphabetic";
-      ctx.font = "bold 22px Arial";
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillText((u.name || "User").substring(0, 15), pos.x, pos.y + pos.r + 35);
 
       ctx.font = "bold 20px Arial";
-      ctx.fillStyle = "#22c55e";
-      ctx.fillText(`$${formatNumber(u.money)}`, pos.x, pos.y + pos.r + 65);
-    }
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText("◆  GOAT-BOT-UPDATED ◆", width / 2, 42);
 
-    const startY = 480;
-    const itemHeight = 65;
-    const maxBarMoney = topUsers[3]?.money || 1;
+      ctx.font = "bold 46px Arial";
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#00d9ff";
+      ctx.shadowBlur = 18;
+      ctx.fillText("TOP BALANCE", width / 2, 90);
 
-    for (let i = 3; i < topUsers.length; i++) {
-      const user = topUsers[i];
-      const currentY = startY + (i - 3) * (itemHeight + 12);
+      ctx.font = "bold 38px Arial";
+      ctx.fillStyle = "#d946ef";
+      ctx.fillText("LEADERBOARD", width / 2, 135);
 
-      drawRoundedRect(40, currentY, width - 80, itemHeight, 10, "rgba(15, 23, 42, 0.75)");
-
-      ctx.textAlign = "left";
-      ctx.font = "16px Arial";
-      ctx.fillStyle = "#64748b";
-      ctx.fillText(`#${i + 1}`, 60, currentY + 38);
-
-      const avX = 100;
-      const avR = 20;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(avX + avR, currentY + 32, avR, 0, Math.PI * 2);
-      ctx.clip();
-      if (avatarCache[user.userID]) {
-        ctx.drawImage(avatarCache[user.userID], avX, currentY + 12, avR * 2, avR * 2);
-      } else {
-        ctx.fillStyle = "#334155";
-        ctx.fillRect(avX, currentY + 12, avR * 2, avR * 2);
-      }
-      ctx.restore();
-
-      ctx.font = "bold 18px Arial";
-      ctx.fillStyle = "#E2E8F0";
-      const truncatedName = (user.name || "User").length > 14 
-        ? (user.name || "User").substring(0, 14) + "..." 
-        : (user.name || "User");
-      ctx.fillText(truncatedName, 155, currentY + 38);
-
-      const barX = 320;
-      const barY = currentY + 26;
-      const maxBarWidth = 260;
-      drawRoundedRect(barX, barY, maxBarWidth, 12, 6, "rgba(255, 255, 255, 0.05)");
-
-      const fillRatio = Math.min((user.money || 0) / maxBarMoney, 1);
-      const activeWidth = Math.max(fillRatio * maxBarWidth, 12);
-
-      const barGrad = ctx.createLinearGradient(barX, 0, barX + activeWidth, 0);
-      barGrad.addColorStop(0, "#00d2ff");
-      barGrad.addColorStop(1, "#00f2fe");
-
-      ctx.shadowColor = "#00f2fe";
-      ctx.shadowBlur = 8;
-      drawRoundedRect(barX, barY, activeWidth, 12, 6, barGrad);
       ctx.shadowBlur = 0;
 
-      ctx.textAlign = "right";
-      ctx.font = "bold 18px Arial";
-      ctx.fillStyle = "#22c55e";
-      ctx.fillText(`$${formatNumber(user.money)}`, width - 60, currentY + 38);
+      ctx.font = "15px Arial";
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText(
+        "BIGGEST BALANCE  •  TOP PLAYERS  •  REAL LEGENDS",
+        width / 2,
+        165
+      );
+
+      const avatarCache = {};
+
+      await Promise.all(
+        topUsers.map(async user => {
+          try {
+            const userId = String(user.userID);
+
+            const fbURL =
+              `https://graph.facebook.com/${encodeURIComponent(userId)}` +
+              `/picture?width=512&height=512&access_token=${encodeURIComponent(ACCESS_TOKEN)}`;
+
+            const response = await axios.get(fbURL, {
+              responseType: "arraybuffer",
+              timeout: 15000,
+              maxRedirects: 5,
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+              }
+            });
+
+            avatarCache[userId] = await loadImage(
+              Buffer.from(response.data)
+            );
+          } catch (error) {
+            avatarCache[String(user.userID)] = null;
+          }
+        })
+      );
+
+      const top3 = [
+        {
+          index: 1,
+          x: 400,
+          y: 275,
+          radius: 90,
+          color: "#ffd700"
+        },
+        {
+          index: 0,
+          x: 205,
+          y: 300,
+          radius: 72,
+          color: "#38bdf8"
+        },
+        {
+          index: 2,
+          x: 595,
+          y: 300,
+          radius: 72,
+          color: "#d946ef"
+        }
+      ];
+
+      const order = [1, 0, 2];
+
+      for (const position of top3) {
+        const user = topUsers[position.index];
+
+        if (!user) continue;
+
+        const avatar = avatarCache[String(user.userID)];
+
+        drawAvatar(
+          avatar,
+          position.x,
+          position.y,
+          position.radius,
+          position.color
+        );
+
+        ctx.beginPath();
+        ctx.arc(
+          position.x + position.radius * 0.7,
+          position.y - position.radius * 0.7,
+          20,
+          0,
+          Math.PI * 2
+        );
+
+        ctx.fillStyle = position.color;
+        ctx.shadowColor = position.color;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.font = "bold 16px Arial";
+        ctx.fillStyle = "#020617";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          `#${position.index + 1}`,
+          position.x + position.radius * 0.7,
+          position.y - position.radius * 0.7
+        );
+
+        ctx.textBaseline = "alphabetic";
+
+        ctx.font = "bold 22px Arial";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(
+          truncate(user.name, 17),
+          position.x,
+          position.y + position.radius + 38
+        );
+
+        ctx.font = "bold 18px Arial";
+        ctx.fillStyle = position.color;
+        ctx.fillText(
+          "$" + formatShortMoney(user.money),
+          position.x,
+          position.y + position.radius + 68
+        );
+      }
+
+      const startY = 500;
+      const itemHeight = 68;
+      const gap = 11;
+
+      let maxMoney = 1n;
+
+      try {
+        maxMoney = BigInt(String(topUsers[0]?.money || 1));
+      } catch {
+        maxMoney = 1n;
+      }
+
+      for (let i = 3; i < topUsers.length; i++) {
+        const user = topUsers[i];
+        const y = startY + (i - 3) * (itemHeight + gap);
+
+        const rankColors = [
+          "#22d3ee",
+          "#38bdf8",
+          "#a78bfa",
+          "#f472b6",
+          "#34d399"
+        ];
+
+        const rankColor = rankColors[(i - 3) % rankColors.length];
+
+        ctx.save();
+
+        roundedRect(
+          32,
+          y,
+          width - 64,
+          itemHeight,
+          15
+        );
+
+        ctx.fillStyle = "rgba(8,15,35,0.92)";
+        ctx.shadowColor = rankColor;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = rankColor;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.restore();
+
+        ctx.beginPath();
+        ctx.arc(65, y + 34, 20, 0, Math.PI * 2);
+        ctx.fillStyle = rankColor;
+        ctx.fill();
+
+        ctx.font = "bold 15px Arial";
+        ctx.fillStyle = "#020617";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`#${i + 1}`, 65, y + 34);
+
+        ctx.textBaseline = "alphabetic";
+
+        const avatar = avatarCache[String(user.userID)];
+
+        drawAvatar(
+          avatar,
+          115,
+          y + 34,
+          25,
+          rankColor
+        );
+
+        ctx.textAlign = "left";
+        ctx.font = "bold 17px Arial";
+        ctx.fillStyle = "#f8fafc";
+
+        ctx.fillText(
+          truncate(user.name, 15),
+          153,
+          y + 39
+        );
+
+        ctx.font = "13px Arial";
+        ctx.fillStyle = "#64748b";
+        ctx.fillText(
+          "RANK #" + (i + 1),
+          153,
+          y + 57
+        );
+
+        const barX = 320;
+        const barY = y + 29;
+        const barWidth = 220;
+        const barHeight = 10;
+
+        roundedRect(
+          barX,
+          barY,
+          barWidth,
+          barHeight,
+          5
+        );
+
+        ctx.fillStyle = "rgba(255,255,255,0.07)";
+        ctx.fill();
+
+        let money = 0n;
+
+        try {
+          money = BigInt(String(user.money || 0));
+        } catch {
+          money = 0n;
+        }
+
+        let ratio = Number(money) / Number(maxMoney);
+
+        if (!isFinite(ratio) || ratio <= 0) {
+          ratio = 0.02;
+        }
+
+        ratio = Math.max(0.02, Math.min(ratio, 1));
+
+        const activeWidth = Math.max(
+          10,
+          barWidth * ratio
+        );
+
+        const barGradient = ctx.createLinearGradient(
+          barX,
+          0,
+          barX + activeWidth,
+          0
+        );
+
+        barGradient.addColorStop(0, "#00d9ff");
+        barGradient.addColorStop(0.5, "#38bdf8");
+        barGradient.addColorStop(1, "#a855f7");
+
+        roundedRect(
+          barX,
+          barY,
+          activeWidth,
+          barHeight,
+          5
+        );
+
+        ctx.fillStyle = barGradient;
+        ctx.shadowColor = "#00d9ff";
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.textAlign = "right";
+        ctx.font = "bold 16px Arial";
+        ctx.fillStyle = "#22d3ee";
+
+        ctx.fillText(
+          "$" + formatShortMoney(user.money),
+          width - 48,
+          y + 39
+        );
+      }
+
+      ctx.textAlign = "center";
+
+      ctx.font = "bold 15px Arial";
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText(
+        "BIGGER BALANCE  •  BIGGER DREAMS",
+        width / 2,
+        height - 65
+      );
+
+      ctx.font = "12px Arial";
+      ctx.fillStyle = "#64748b";
+      ctx.fillText(
+        "MADE BY XALMAN",
+        width / 2,
+        height - 38
+      );
+
+      const cacheDir = path.join(__dirname, "cache");
+
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, {
+          recursive: true
+        });
+      }
+
+      const imagePath = path.join(
+        cacheDir,
+        `top_${Date.now()}.png`
+      );
+
+      fs.writeFileSync(
+        imagePath,
+        canvas.toBuffer("image/png")
+      );
+
+      return message.reply(
+        {
+          body: " Balance Leaderboard",
+          attachment: fs.createReadStream(imagePath)
+        },
+        () => {
+          setTimeout(() => {
+            try {
+              if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+              }
+            } catch {}
+          }, 5000);
+        }
+      );
+
+    } catch (error) {
+      console.error("TOP COMMAND ERROR:", error);
+
+      return message.reply(
+        "❌ Failed to generate leaderboard."
+      );
     }
-
-    ctx.textAlign = "center";
-    ctx.font = "16px Arial";
-    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
-    ctx.fillText("Powered by xalman", width / 2, height - 30);
-
-    const cachePath = path.join(__dirname, "cache");
-    if (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath);
-
-    const imagePath = path.join(cachePath, `top_${Date.now()}.png`);
-    fs.writeFileSync(imagePath, canvas.toBuffer("image/png"));
-
-    return message.reply({
-      body: "🏆 leaderboard ",
-      attachment: fs.createReadStream(imagePath)
-    }, () => {
-      if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-    });
   }
 };
