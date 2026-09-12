@@ -476,7 +476,7 @@ function drawHeader(
   ctx.fillStyle = "#38d9ff";
 
   ctx.fillText(
-    "◆  GOATBOT V2  ◆",
+    "",
     width / 2,
     42
   );
@@ -1228,7 +1228,7 @@ function drawFooter(
     "#36dfff";
 
   ctx.fillText(
-    "◆  GOATBOT NX  ◆",
+    "◆  GOAT-BOT-UPDATED ◆",
     width / 2,
     height - 70
   );
