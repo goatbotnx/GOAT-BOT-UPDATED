@@ -2,82 +2,32 @@ const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
-const GENRES = {
-  1: "Phonk",
-  2: "Lo-fi",
-  3: "EDM",
-  4: "Hip Hop",
-  5: "Pop",
-  6: "Rock",
-  7: "Jazz",
-  8: "Trap",
-  9: "R&B",
-  10: "Classical",
-  11: "Cinematic",
-  12: "Experimental"
-};
-
-const STYLES = {
-  1: "Aggressive energy",
-  2: "Deep 808 bass",
-  3: "Powerful vocals",
-  4: "Chill vibe",
-  5: "Emotional",
-  6: "Epic",
-  7: "Sad",
-  8: "Romantic",
-  9: "Happy",
-  10: "Dreamy",
-  11: "Energetic"
-};
-
-const DEFAULT_GENRE = "Phonk";
-const DEFAULT_STYLE = "Energetic";
 const DEFAULT_DURATION = 120;
 
 module.exports = {
   config: {
     name: "ai-song",
     aliases: ["aisong", "aimusic"],
-    version: "3.0",
+    version: "4.1",
     author: "xalman",
     countDown: 20,
     role: 0,
     shortDescription: "Generate AI songs",
-    longDescription: "Generate custom AI songs using prompt, genre, style and duration.",
+    longDescription: "Generate custom AI songs using a prompt and duration.",
     category: "AI-MUSIC",
 
     guide: {
       en: `
 ╭━━━〔 🎵 AI SONG GENERATOR 〕━━━╮
 
-📝 𝗕𝗮𝘀𝗶𝗰:
-{pn} <prompt>
+📝 𝗨𝘀𝗮𝗴𝗲:
+{pn} <prompt> [--d <6-120>]
+
+🔹 𝗘𝘅𝗮𝗺𝗽𝗹𝗲𝘀:
 › {pn} A romantic song about Bangladesh
-
-🎛️ 𝗔𝗱𝘃𝗮𝗻𝗰𝗲𝗱:
-{pn} <prompt> --g <1-12> --s <1-11> --d <6-120>
-› {pn} My Song --g 1 --s 2 --d 60
-
-🎼 𝗚𝗲𝗻𝗿𝗲 𝗜𝗗𝘀:
- 1. Phonk         7. Jazz
- 2. Lo-fi         8. Trap
- 3. EDM           9. R&B
- 4. Hip Hop      10. Classical
- 5. Pop          11. Cinematic
- 6. Rock         12. Experimental
-
-🎨 𝗦𝘁𝘆𝗹𝗲 𝗜𝗗𝘀:
- 1. Aggressive energy    7. Sad
- 2. Deep 808 bass        8. Romantic
- 3. Powerful vocals      9. Happy
- 4. Chill vibe          10. Dreamy
- 5. Emotional           11. Energetic
- 6. Epic
+› {pn} My Song --d 60
 
 ⏱️ 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: 6 – 120s (Default: 120)
-
-💡 Missing any flag → default is used.
 
 ╰━━━〔 ⚡ Powered by NX AI 〕━━━╯
 `
@@ -94,8 +44,8 @@ module.exports = {
 
 📝 Please provide a song prompt.
 
-› Basic:  {pn} My Bangladesh Song
-› Custom: {pn} My Song --g 1 --s 2 --d 60
+› {pn} My Bangladesh Song
+› {pn} My Song --d 60
 
 Type {pn} help for full guide.`,
         threadID,
@@ -111,35 +61,15 @@ Type {pn} help for full guide.`,
       );
     }
 
-
-    let genre = DEFAULT_GENRE;
-    let style = DEFAULT_STYLE;
     let duration = DEFAULT_DURATION;
 
-    const gMatch = input.match(/--g\s+(\d+)/i);
-    const sMatch = input.match(/--s\s+(\d+)/i);
     const dMatch = input.match(/--d\s+(\d+)/i);
-
-    if (gMatch) {
-      const id = parseInt(gMatch[1]);
-      if (GENRES[id]) genre = GENRES[id];
-    }
-
-    if (sMatch) {
-      const id = parseInt(sMatch[1]);
-      if (STYLES[id]) style = STYLES[id];
-    }
-
     if (dMatch) {
       const d = parseInt(dMatch[1]);
       if (!isNaN(d)) duration = Math.max(6, Math.min(120, d));
     }
 
-    const prompt = input
-      .replace(/--g\s+\d+/i, "")
-      .replace(/--s\s+\d+/i, "")
-      .replace(/--d\s+\d+/i, "")
-      .trim();
+    const prompt = input.replace(/--d\s+\d+/i, "").trim();
 
     if (!prompt) {
       return api.sendMessage("❌ Please provide a song prompt.", threadID, messageID);
@@ -159,14 +89,14 @@ Type {pn} help for full guide.`,
       api.setMessageReaction("⏳", messageID, () => {}, true);
 
       loadingMessage = await api.sendMessage(
-        `🎵 Generating AI Song...\n\n📝 ${prompt}\n🎼 ${genre} • 🎨 ${style}\n⏱️ ${duration}s\n\n⚡ Please wait...`,
+        "🎵 Generating AI song.......",
         threadID
       );
 
       const response = await axios.get(
         "https://xalman-apis.vercel.app/api/ai-song",
         {
-          params: { prompt, genre, style, duration },
+          params: { prompt, duration },
           responseType: "arraybuffer",
           timeout: 180000,
           maxContentLength: 100 * 1024 * 1024,
@@ -195,7 +125,7 @@ Type {pn} help for full guide.`,
 
       return api.sendMessage(
         {
-          body: `🎵 AI Song Generated\n📝 ${prompt}\n🎼 ${genre} • 🎨 ${style} • ⏱️ ${duration}s`,
+          body: `🎵 AI Song Generated\n⏱️ ${duration}s`,
           attachment: fs.createReadStream(filePath)
         },
         threadID,
