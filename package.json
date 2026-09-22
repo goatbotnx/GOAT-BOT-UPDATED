@@ -24,7 +24,7 @@
     "fontstyles": "^1.1.2",
     "fs": "^0.0.1-security",
     "fs-extra": "^11.1.0",
-    "fca-nx": "^6.7.0",
+    "fca-nx": "^6.7.2",
     "googleapis": "^100.0.0",
     "gif-encoder-2": "^1.0.5",
     "gradient-string": "^2.0.2",
