@@ -588,7 +588,7 @@ module.exports = {
           : "🎬 VIDEO";
 
       const caption =
-`🚨 DOWNLOAD COMPLETE 🚨
+`🎬 DOWNLOAD COMPLETE 🎬
 ────────────────────
 🔻 TITLE — ${shortTitle}
 🔻 PLATFORM — ${String(platform).toUpperCase()}
