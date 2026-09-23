@@ -1,6 +1,8 @@
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
+const http = require("http");
+const https = require("https");
 const { pipeline } = require("stream/promises");
 
 const USER_AGENTS = [
@@ -11,6 +13,16 @@ const USER_AGENTS = [
 ];
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const DOWNLOADER_API =
+  "https://xalman-downloader.vercel.app/api/video?url=";
+const HTTP_AGENT = new http.Agent({
+  keepAlive: true,
+  maxSockets: 32
+});
+const HTTPS_AGENT = new https.Agent({
+  keepAlive: true,
+  maxSockets: 32
+});
 
 function getUserAgent() {
   return USER_AGENTS[
@@ -79,6 +91,87 @@ function getExtension(url, contentType, isAudio) {
   return ".mp4";
 }
 
+function isHttpUrl(value) {
+  return typeof value === "string" && /^https?:\/\//i.test(value.trim());
+}
+
+function collectMediaLinks(payload) {
+  const videos = [];
+  const audios = [];
+  const seenVideos = new Set();
+  const seenAudios = new Set();
+
+  const addVideo = value => {
+    if (isHttpUrl(value) && !seenVideos.has(value)) {
+      seenVideos.add(value);
+      videos.push(value);
+    }
+  };
+
+  const addAudio = value => {
+    if (isHttpUrl(value) && !seenAudios.has(value)) {
+      seenAudios.add(value);
+      audios.push(value);
+    }
+  };
+
+  const walk = (node, context = null) => {
+    if (Array.isArray(node)) {
+      node.forEach(item => walk(item, context));
+      return;
+    }
+
+    if (!node || typeof node !== "object") return;
+
+    for (const [key, value] of Object.entries(node)) {
+      const lowerKey = key.toLowerCase();
+      const isAudioContainer =
+        lowerKey === "audio" ||
+        lowerKey === "audios" ||
+        lowerKey === "audiourl" ||
+        lowerKey === "audio_url";
+      const isVideoContainer =
+        lowerKey === "video" ||
+        lowerKey === "videos" ||
+        lowerKey === "downloads" ||
+        lowerKey === "links";
+      const isImageContainer =
+        lowerKey === "image" ||
+        lowerKey === "images" ||
+        lowerKey === "photo" ||
+        lowerKey === "photos" ||
+        lowerKey === "thumbnail" ||
+        lowerKey === "poster";
+
+      if (isHttpUrl(value)) {
+        if (
+          isAudioContainer ||
+          context === "audio" ||
+          lowerKey === "streamurl" ||
+          lowerKey === "stream_url"
+        ) {
+          addAudio(value);
+        } else if (!isImageContainer && context !== "image") {
+          addVideo(value);
+        }
+      }
+
+      const nextContext = isAudioContainer
+        ? "audio"
+        : isVideoContainer
+          ? "video"
+          : isImageContainer
+            ? "image"
+            : context;
+
+      walk(value, nextContext);
+    }
+  };
+
+  walk(payload);
+  return { videos, audios };
+}
+
 module.exports = {
   config: {
     name: "autodl",
@@ -124,23 +217,41 @@ module.exports = {
     const supported = [
       "tiktok.com",
       "facebook.com",
+      "fb.com",
       "fb.watch",
       "instagram.com",
-      "reels",
+      "instagr.am",
       "youtube.com",
       "youtu.be",
+      "tumblr.com",
       "pinterest.com",
       "pin.it",
       "twitter.com",
       "x.com",
+      "threads.net",
+      "threads.com",
+      "terabox.com",
+      "1024terabox.com",
+      "spotify.link",
       "capcut.com",
+      "capcut.net",
       "spotify.com",
       "soundcloud.com",
-      "mediafire.com",
       "snapchat.com",
-      "threads.com",
-      "likee.com",
-      "likee.video"
+      "snap.com",
+      "reddit.com",
+      "redd.it",
+      "linkedin.com",
+      "lnkd.in",
+      "kuaishou.com",
+      "kwai.com",
+      "douyin.com",
+      "dailymotion.com",
+      "dai.ly",
+      "bsky.app",
+      "bsky.social",
+      "xnxx.com",
+      "xnxx.tv"
     ];
 
     if (
@@ -189,7 +300,7 @@ module.exports = {
       react("⏳");
 
       const apiUrl =
-        `https://xalman-apis.vercel.app/api/universaldownloader?url=${encodeURIComponent(url)}`;
+        `${DOWNLOADER_API}${encodeURIComponent(url)}`;
 
       const apiResponse = await axios.get(apiUrl, {
         timeout: 30000,
@@ -202,16 +313,30 @@ module.exports = {
 
       const apiData = apiResponse.data;
 
-      if (!apiData?.status) {
+      if (
+        apiData?.success !== true ||
+        apiData?.data?.success === false
+      ) {
         throw new Error(
-          apiData?.message || "API returned an unsuccessful response."
+          apiData?.error ||
+          apiData?.data?.error ||
+          "API returned an unsuccessful response."
         );
       }
 
       const result = apiData.data || {};
+      const { videos, audios } =
+        collectMediaLinks(result);
 
-      const videoUrl = result.url;
-      const audioUrl = result.audio_url;
+      const videoUrl =
+        videos[0] ||
+        (isHttpUrl(result.url) ? result.url : null);
+
+      const audioUrl =
+        audios[0] ||
+        (isHttpUrl(result.audiourl)
+          ? result.audiourl
+          : null);
 
       let primaryUrl;
       let isAudio = false;
@@ -238,6 +363,8 @@ module.exports = {
 
       const quality =
         result.quality ||
+        result.videos?.[0]?.quality ||
+        result.audios?.[0]?.quality ||
         (isAudio ? "Audio" : "Video");
 
       const cacheDir =
@@ -267,6 +394,8 @@ module.exports = {
             maxRedirects: 10,
             maxContentLength: MAX_FILE_SIZE,
             maxBodyLength: MAX_FILE_SIZE,
+            httpAgent: HTTP_AGENT,
+            httpsAgent: HTTPS_AGENT,
             headers: {
               "User-Agent": getUserAgent(),
               "Accept": "*/*",
@@ -366,7 +495,8 @@ module.exports = {
 
       const writer =
         fs.createWriteStream(
-          filePath
+          filePath,
+          { highWaterMark: 1024 * 1024 }
         );
 
       let downloaded =
@@ -454,24 +584,20 @@ module.exports = {
 
       const mediaType =
         isAudio
-          ? "🎵 𝗔𝘂𝗱𝗶𝗼"
-          : "🎬 𝗩𝗶𝗱𝗲𝗼";
+          ? "🎵 AUDIO"
+          : "🎬 VIDEO";
 
       const caption =
-`┏━━━━━━━━━━━━━━━━━━━━┓
-┃   📥 𝗔𝗟𝗟 𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗𝗘𝗥   ┃
-┗━━━━━━━━━━━━━━━━━━━━┛
-
-📝 𝗧𝗶𝘁𝗹𝗲: ${shortTitle}
-🌐 𝗣𝗹𝗮𝘁𝗳𝗼𝗿𝗺: ${String(platform).toUpperCase()}
-${mediaType}
-🎯 𝗤𝘂𝗮𝗹𝗶𝘁𝘆: ${quality}
-📦 𝗦𝗶𝘇𝗲: ${formatSize(stats.size)}
-⏱️ 𝗧𝗶𝗺𝗲: ${elapsed}s
-
-👨‍💻 𝗗𝗲𝘃: xalman
-
-╰─── ⋆⋅☆⋅⋆ ───╯`;
+`🚨 DOWNLOAD COMPLETE 🚨
+────────────────────
+🔻 TITLE — ${shortTitle}
+🔻 PLATFORM — ${String(platform).toUpperCase()}
+🔻 FILE — ${mediaType}
+🔻 QUALITY — ${quality}
+🔻 SIZE — ${formatSize(stats.size)}
+🔻 TIME — ${elapsed}s
+────────────────────
+⚙️ POWERED BY XALMAN`;
 
       await message.reply({
         body: caption,
