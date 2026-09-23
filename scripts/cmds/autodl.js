@@ -175,11 +175,11 @@ function collectMediaLinks(payload) {
 module.exports = {
   config: {
     name: "autodl",
-    version: "20.0",
+    version: "22.0",
     author: "xalman",
     countDown: 1,
     role: 0,
-    shortDescription: "Multi-Platform Media Downloader",
+    shortDescription: "Multi-Platform Media Downloader up to 22+",
     longDescription: "Download video/audio from supported platforms.",
     category: "ANIME & MEDIA",
     guide: "{pn} <link> (or just send the link)"
@@ -224,6 +224,8 @@ module.exports = {
       "youtube.com",
       "youtu.be",
       "tumblr.com",
+      "l.likee.video", 
+      "likee.video",
       "pinterest.com",
       "pin.it",
       "twitter.com",
@@ -250,8 +252,7 @@ module.exports = {
       "dai.ly",
       "bsky.app",
       "bsky.social",
-      "xnxx.com",
-      "xnxx.tv"
+      "music.apple.com"
     ];
 
     if (
