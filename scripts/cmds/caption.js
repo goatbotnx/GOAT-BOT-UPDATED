@@ -1,5 +1,34 @@
 const axios = require("axios");
 
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalmanx-caption";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
+
 module.exports = {
   config: {
     name: "caption",
@@ -36,7 +65,7 @@ module.exports = {
 
     try {
       api.setMessageReaction("🔍", messageID, () => {}, true);
-      const res = await axios.get(`https://xalman-caption-apix.vercel.app/caption?category=${category}`);
+      const res = await axios.get(`${await getApiBaseUrl()}/caption?category=${category}`);
       const caption = res.data.caption;
 
       const responseMsg = `『 ${category.toUpperCase()} CAPTION 』\n\n${caption}\n\n${categories[category].icon}━━━━━━━✨━━━━━━━${categories[category].icon}`;

@@ -1,5 +1,34 @@
 const axios = require("axios");
 
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalman-hub";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
+
 module.exports = {
   config: {
     name: "cloudinary",
@@ -35,7 +64,7 @@ module.exports = {
       const results = await Promise.all(
         attachments.map(async (att) => {
           try {
-            const apiUrl = `https://xalman-apis.vercel.app/api/cloudupload?url=${encodeURIComponent(att.url)}`;
+            const apiUrl = `${await getApiBaseUrl()}/api/cloudupload?url=${encodeURIComponent(att.url)}`;
             const res = await axios.get(apiUrl, { timeout: 60000 });
 
             if (res.data.status && res.data.file && res.data.file.secure_url) {

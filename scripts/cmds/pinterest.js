@@ -1,4 +1,33 @@
 const axios = require("axios");
+
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalman-hub";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
 const { createCanvas, loadImage } = require("canvas");
 const fs = require("fs-extra");
 const path = require("path");
@@ -36,7 +65,7 @@ module.exports = {
     const perPage = 12;
 
     try {
-      const res = await axios.get("https://xalman-apis.vercel.app/api/pinimg", {
+      const res = await axios.get(`${await getApiBaseUrl()}/api/pinimg`, {
         params: { search: query, count: 60 },
         timeout: 30000,
         validateStatus: () => true

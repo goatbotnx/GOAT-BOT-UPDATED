@@ -1,4 +1,33 @@
 const axios = require("axios");
+
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalman-hub";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
 const fs = require("fs-extra");
 const path = require("path");
 
@@ -32,7 +61,7 @@ module.exports = {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const searchUrl = `https://xalman-apis.vercel.app/api/spotifysearch?query=${encodeURIComponent(query)}`;
+        const searchUrl = `${await getApiBaseUrl()}/api/spotifysearch?query=${encodeURIComponent(query)}`;
         const searchRes = await axios.get(searchUrl, { timeout: 15000 });
 
         if (searchRes.data.status && searchRes.data.results && searchRes.data.results.length > 0) {
@@ -105,7 +134,7 @@ module.exports = {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const downloadUrl = `https://xalman-apis.vercel.app/api/universaldownloader?url=${encodeURIComponent(trackUrl)}`;
+        const downloadUrl = `${await getApiBaseUrl()}/api/universaldownloader?url=${encodeURIComponent(trackUrl)}`;
         const downloadRes = await axios.get(downloadUrl, { timeout: 30000 });
 
         if (downloadRes.data.status && downloadRes.data.data && downloadRes.data.data.url) {

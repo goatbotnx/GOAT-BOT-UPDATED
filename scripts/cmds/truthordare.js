@@ -1,6 +1,34 @@
 const axios = require("axios");
 
-const xalman_API = "https://xalman-truthordare-api.vercel.app/api";
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalman-td";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
+
 
 module.exports = {
   config: {
@@ -37,6 +65,7 @@ module.exports = {
 
   onReply: async function ({ event, message }) {
     const choice = event.body?.trim();
+    const xalman_API = `${await getApiBaseUrl()}/api`;
 
     try {
       if (choice === "1" || choice === "2") {

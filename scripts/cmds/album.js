@@ -1,4 +1,33 @@
 const axios = require("axios");
+
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalman-hub";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
 const fs = require("fs-extra");
 const path = require("path");
 const { pipeline } = require("stream");
@@ -6,7 +35,6 @@ const { promisify } = require("util");
 
 const streamPipeline = promisify(pipeline);
 
-const API_BASE = "https://xalman-apis.vercel.app/api/category";
 const CACHE_DIR = path.join(__dirname, "cache");
 
 const xalman_UA =
@@ -29,6 +57,7 @@ module.exports = {
   },
 
   onStart: async function ({ message, event, args }) {
+    const API_BASE = `${await getApiBaseUrl()}/api/category`;
     try {
       const catRes = await axios.get(API_BASE);
       const allCategories =
@@ -89,6 +118,7 @@ module.exports = {
   },
 
   onReply: async function ({ message, event, Reply }) {
+    const API_BASE = `${await getApiBaseUrl()}/api/category`;
     const { author, categories, page, totalPages, messageID } = Reply;
     if (event.senderID !== author) return;
 

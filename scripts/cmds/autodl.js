@@ -1,4 +1,33 @@
 const axios = require("axios");
+
+const API_CONFIG_URL = "https://raw.githubusercontent.com/goatbotnx/xalmanx210/refs/heads/main/apis.json";
+const API_KEY = "xalman-downloader";
+let apiBaseUrl = null;
+let apiConfigRequest = null;
+
+async function getApiBaseUrl() {
+  if (apiBaseUrl) return apiBaseUrl;
+
+  if (!apiConfigRequest) {
+    apiConfigRequest = axios
+      .get(API_CONFIG_URL, { timeout: 15000 })
+      .then(({ data }) => {
+        const baseUrl = data?.[API_KEY];
+
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          throw new Error(`Missing API key in apis.json: ${API_KEY}`);
+        }
+
+        apiBaseUrl = baseUrl.replace(/\/+$/, "");
+        return apiBaseUrl;
+      })
+      .finally(() => {
+        apiConfigRequest = null;
+      });
+  }
+
+  return apiConfigRequest;
+}
 const fs = require("fs-extra");
 const path = require("path");
 const http = require("http");
@@ -13,8 +42,6 @@ const USER_AGENTS = [
 ];
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
-const DOWNLOADER_API =
-  "https://xalman-downloader.vercel.app/api/video?url=";
 const HTTP_AGENT = new http.Agent({
   keepAlive: true,
   maxSockets: 32
@@ -281,6 +308,7 @@ module.exports = {
   ) {
     const { messageID } = event;
     const start = Date.now();
+    const DOWNLOADER_API = `${await getApiBaseUrl()}/api/video?url=`;
 
     let filePath = null;
 
