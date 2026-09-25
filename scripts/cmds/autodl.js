@@ -279,7 +279,8 @@ module.exports = {
       "dai.ly",
       "bsky.app",
       "bsky.social",
-      "music.apple.com"
+      "music.apple.com",
+      "snackvideo.com"
     ];
 
     if (
