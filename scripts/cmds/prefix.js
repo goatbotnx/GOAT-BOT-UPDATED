@@ -4,7 +4,7 @@ const moment = require("moment-timezone");
 const getStreamFromURL = global.utils.getStreamFromURL;
 
 const gifList = [
-	"https://i.postimg.cc/4Nc9WZcb/37c213627014c4a98f20321a2e3f9079.gif"
+	"https://i.postimg.cc/7hjs8H2n/nxai-prefix.gif"
 ];
 
 const getRandomGif = () =>
@@ -13,7 +13,7 @@ const getRandomGif = () =>
 module.exports = {
 	config: {
 		name: "prefix",
-		version: "2.2",
+		version: "3.0",
 		author: "xalman",
 		countDown: 5,
 		role: 0,
@@ -115,15 +115,13 @@ module.exports = {
 
 		return message.reply({
 			body:
-`╭━━━〔 🤖 CHATBOT PREFIX 〕━━━╮
-┃ 🏷️ Group : ${groupName}
-┃ 🔰 System : 『 ${systemPrefix} 』
-┃ 💬 Group  : 『 ${groupPrefix} 』
-┃ ⏰ Time   : ${time}
-┃ 📅 Date   : ${date}
-┃ 👑 Owner  : ${owner}
-┃ ⚡ Status : ONLINE
-╰━━━〔 ✨ Powered by Xalman 〕━━━╯`,
+`╭─〔 🤖 𝐁𝐎𝐓 𝐏𝐑𝐄𝐅𝐈𝐗 〕─╮
+│ 🌐 𝐆𝐑𝐎𝐔𝐏 𝐍𝐀𝐌𝐄  —> ${groupName}
+│ ⚡ 𝐏𝐑𝐄𝐅𝐈𝐗 ─>「 ${systemPrefix} 」
+│ 💬 𝐆𝐑𝐎𝐔𝐏  ─>『 ${groupPrefix} 』
+│ 🕐 𝐓𝐈𝐌𝐄  ─>  ${time} • ${date}
+│ ⚙️ 𝐒𝐘𝐒𝐓𝐄𝐌  •   𝐎𝐍𝐋𝐈𝐍𝐄
+╰─〔 ✦𝐏𝐎𝐖𝐄𝐑𝐄𝐃 𝐁𝐘 𝐗𝐀𝐋𝐌𝐀𝐍✦ 〕─╯`,
 			attachment: await getStreamFromURL(gif)
 		});
 	}
