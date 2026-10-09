@@ -64,9 +64,6 @@ async function fetchWithRetry(url, retries = 3, delay = 3000) {
   }
   throw lastErr || new Error("Request failed");
 }
-
-// Fallback gender detection via Facebook Graph API
-// returns 1 = Female, 2 = Male, 0 = Unknown
 async function detectGender(uid) {
   try {
     const url = `https://graph.facebook.com/${uid}?fields=gender&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`;
@@ -117,8 +114,7 @@ module.exports = {
 
       const senderName = senderInfo?.name || "Someone";
       const mentionName = mentionInfo?.name || "Someone";
-
-      // Gender: 1 = Female, 2 = Male (per your database schema)
+      
       let senderGender = Number(senderInfo?.gender) || 0;
       let mentionGender = Number(mentionInfo?.gender) || 0;
 
